@@ -31,20 +31,31 @@ const CHAT_STORAGE = 'chestnut.chat.v1';
 // Covers the bounded rows below even when JSON escapes every character. Reads
 // and writes must share this limit; browser quota failures remain explicit.
 const CHAT_MAX_SERIALIZED = 32000000;
+// A 32k prompt/direction may need six JSON characters per input character,
+// plus Bot/task IDs and field names. Use the same bound on both sides.
+const CHAT_MAX_SIGNATURE = 200000;
 const chatKey = key => key === 'bot-create' || /^(task|command):/.test(key);
+const chatStringRow = row => Array.isArray(row)&&row.length===2&&typeof row[0]==='string'&&row[0].length<200&&typeof row[1]==='string'&&row[1].length<=32000;
+function chatPendingRow(row) {
+  if(!Array.isArray(row)||row.length!==2)return false;const [key,value]=row;
+  if(typeof key!=='string'||!chatKey(key)||typeof value?.signature!=='string'||value.signature.length>CHAT_MAX_SIGNATURE||typeof value.id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.id))return false;
+  try{const payload=JSON.parse(value.signature);return !!payload&&typeof payload==='object'&&!Array.isArray(payload);}catch{return false;}
+}
 function saveChat() {
-  try { const serialized=JSON.stringify({version:1,botDraft:state.botDraft,drafts:[...state.drafts].slice(-20),commands:[...state.commandDrafts].slice(-30),kinds:[...state.commandKinds].slice(-30),selected:[...state.selectedTasks].slice(-20),pending:[...state.submissions].filter(([key])=>chatKey(key)).slice(-30)});if(serialized.length>CHAT_MAX_SERIALIZED)throw new Error('Chat recovery capacity exceeded');sessionStorage.setItem(CHAT_STORAGE,serialized);state.chatStored=true; }
+  try { const saved={version:1,botDraft:state.botDraft,drafts:[...state.drafts].slice(-20),commands:[...state.commandDrafts].slice(-30),kinds:[...state.commandKinds].slice(-30),selected:[...state.selectedTasks].slice(-20),pending:[...state.submissions].filter(([key])=>chatKey(key)).slice(-30)};
+    if(typeof saved.botDraft!=='string'||saved.botDraft.length>80||![...saved.drafts,...saved.commands,...saved.kinds,...saved.selected].every(chatStringRow)||!saved.kinds.every(([,kind])=>['steer','follow_up'].includes(kind))||!saved.pending.every(chatPendingRow))throw new Error('Chat recovery entry cannot be restored');
+    const serialized=JSON.stringify(saved);if(serialized.length>CHAT_MAX_SERIALIZED)throw new Error('Chat recovery capacity exceeded');sessionStorage.setItem(CHAT_STORAGE,serialized);state.chatStored=true; }
   catch { state.chatStored=false; }
 }
 function restoreChat() {
   try {
     const raw=sessionStorage.getItem(CHAT_STORAGE);if(!raw)return;if(raw.length>CHAT_MAX_SERIALIZED){state.chatStored=false;return;}
     const saved=JSON.parse(raw);if(saved.version!==1)return;
-    const strings=(rows,max)=>new Map(Array.isArray(rows)?rows.slice(-max).filter(row=>Array.isArray(row)&&row.length===2&&typeof row[0]==='string'&&row[0].length<200&&typeof row[1]==='string'&&row[1].length<=32000):[]);
+    const strings=(rows,max)=>new Map(Array.isArray(rows)?rows.slice(-max).filter(chatStringRow):[]);
     state.drafts=strings(saved.drafts,20);state.commandDrafts=strings(saved.commands,30);state.selectedTasks=strings(saved.selected,20);
     state.commandKinds=new Map([...strings(saved.kinds,30)].filter(([,kind])=>['steer','follow_up'].includes(kind)));
     state.botDraft=typeof saved.botDraft==='string'?saved.botDraft.slice(0,80):'';
-    for(const row of Array.isArray(saved.pending)?saved.pending.slice(-30):[]){if(!Array.isArray(row)||row.length!==2)continue;const [key,value]=row;if(typeof key==='string'&&chatKey(key)&&typeof value?.signature==='string'&&value.signature.length<=100000&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.id)){const payload=JSON.parse(value.signature);if(payload&&typeof payload==='object'&&!Array.isArray(payload))state.submissions.set(key,value);}}
+    for(const row of Array.isArray(saved.pending)?saved.pending.slice(-30):[])if(chatPendingRow(row))state.submissions.set(...row);
   } catch { /* Corrupt or older storage never causes a request to be executed. */ }
 }
 restoreChat();

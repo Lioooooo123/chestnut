@@ -34,7 +34,7 @@ Run from the repository root:
 
 These are dependency-free, socket-free controller tests with a minimal DOM and a mocked API. They cover empty/create flows, duplicate submits, retry IDs, steering/follow-ups, cancellation, interrupted states, event cursors, safe text rendering, draft retention, offline/quarantine states, and polling visibility.
 
-The suite has 44 passing controller tests, including reload, lost acknowledgments, creation deduplication, expired Steer recovery, large journal round-trips and storage-quota failures. They are not real-browser or visual tests. The latest macOS pass separately exercised Safari Bot creation, task/Steer/Follow-up/Cancel, same-tab draft reload, API/Worker restart and history recovery, plus 320/390px read-only WebKit frames. These are simulated tasks, not real AI or real phone hardware; see `docs/mvp-acceptance.md` and `docs/verification.md`.
+The suite has 45 passing controller tests, including reload, lost acknowledgments, creation deduplication, expired Steer recovery, large journals including escaped pending signatures, explicit same-ID retries and storage-quota failures. They are not real-browser or visual tests. The latest macOS pass separately exercised Safari Bot creation, task/Steer/Follow-up/Cancel, same-tab draft reload, API/Worker restart and history recovery, plus 320/390px read-only WebKit frames. These are simulated tasks, not real AI or real phone hardware; see `docs/mvp-acceptance.md` and `docs/verification.md`.
 
 
 ## New management UI verification

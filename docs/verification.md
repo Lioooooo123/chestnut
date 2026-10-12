@@ -1,5 +1,9 @@
 # Verification report
 
+## Escaped pending-signature repair after 98092da
+
+The large-journal test now escapes pending signatures themselves: 30 signatures over 192k characters survive a 13M-character journal reload alongside all drafts, selections, kinds and Bot draft. Shared signature/entry validation prevents successful saves of entries the reader would discard. UI-event regressions verify task/Steer/follow-up 20k escaped text retains the original request IDs for explicit unchanged retries, with no automatic POST. Full guarded macOS check: **320 tests, 310 pass, 0 fail, 10 Linux OS-lock skips**; 45 controller tests passed, and real loopback process/restart coverage passed. This repair has controller coverage; runtime/vendor/workflows and the earlier live-verification boundaries are unchanged.
+
 ## Journal-capacity repair after ecd38e2
 
 The saved chat journal could exceed its old 2,000,000-character restore threshold and be silently discarded on reload. Read/write capacity is now consistent, and storage failure warns even for an unsent draft. Two actual-UI-function regressions cover supported large/escaped journals and quota failure preserving the last saved journal and in-tab IDs. The guarded macOS full check passed **319 tests: 309 passed, 0 failed, 10 Linux OS-lock skips**; all 44 controller tests passed. Real loopback restart tests also passed. This small repair has controller coverage; the Safari evidence below is from `ecd38e2`. Vendor/runtime/workflows remain unchanged.

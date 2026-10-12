@@ -490,7 +490,8 @@ test('chat journal excludes model callback/maintenance state and corrupt journal
 test('actual chat journal functions round-trip supported drafts and pending IDs above the former read limit',async()=>{
   const s=await setup();
   s.run(`
-    for(let i=0;i<20;i++)state.drafts.set(crypto.randomUUID(),'t'.repeat(32000));
+    state.botDraft='b'.repeat(80);
+    for(let i=0;i<20;i++){const botId=crypto.randomUUID();state.drafts.set(botId,'t'.repeat(32000));state.selectedTasks.set(botId,crypto.randomUUID());}
     for(let i=0;i<30;i++){
       const taskId=crypto.randomUUID(),botId=crypto.randomUUID();
       state.commandDrafts.set(taskId,'c'.repeat(32000));
@@ -500,14 +501,14 @@ test('actual chat journal functions round-trip supported drafts and pending IDs 
     saveChat();
   `);
   assert.ok(s.session.get('chestnut.chat.v1').length>2000000);assert.equal(s.run('state.chatStored'),true);
-  const before=s.run('JSON.stringify({drafts:[...state.drafts],commands:[...state.commandDrafts],pending:[...state.submissions]})');
-  const next=await setup(s);assert.equal(next.run('JSON.stringify({drafts:[...state.drafts],commands:[...state.commandDrafts],pending:[...state.submissions]})'),before);
+  const before=s.run('JSON.stringify({botDraft:state.botDraft,drafts:[...state.drafts],commands:[...state.commandDrafts],kinds:[...state.commandKinds],selected:[...state.selectedTasks],pending:[...state.submissions]})');
+  const next=await setup(s);assert.equal(next.run('JSON.stringify({botDraft:state.botDraft,drafts:[...state.drafts],commands:[...state.commandDrafts],kinds:[...state.commandKinds],selected:[...state.selectedTasks],pending:[...state.submissions]})'),before);
   assert.equal(next.run('state.chatStored'),true);assert.equal(next.backend.calls.some(call=>call.method==='POST'),false);
   // Escaping can expand valid field sizes much further than their input length.
-  s.run(`state.drafts=new Map([...state.drafts].map(([key])=>[key,'\\u0001'.repeat(32000)]));state.commandDrafts=new Map([...state.commandDrafts].map(([key])=>[key,'\\u0001'.repeat(32000)]));saveChat()`);
-  assert.ok(s.session.get('chestnut.chat.v1').length>10000000);
-  const escaped=s.run('JSON.stringify({drafts:[...state.drafts],commands:[...state.commandDrafts],pending:[...state.submissions]})');
-  const reloaded=await setup(s);assert.equal(reloaded.run('JSON.stringify({drafts:[...state.drafts],commands:[...state.commandDrafts],pending:[...state.submissions]})'),escaped);assert.equal(reloaded.backend.calls.some(call=>call.method==='POST'),false);
+  s.run(`state.drafts=new Map([...state.drafts].map(([key])=>[key,'\\u0001'.repeat(32000)]));state.commandDrafts=new Map([...state.commandDrafts].map(([key])=>[key,'\\u0001'.repeat(32000)]));state.submissions=new Map([...state.submissions].map(([key,value])=>[key,{...value,signature:JSON.stringify({...JSON.parse(value.signature),text:'\\u0001'.repeat(32000)})}]));saveChat()`);
+  assert.ok(s.session.get('chestnut.chat.v1').length>13000000);assert.equal(s.run('state.chatStored'),true);assert.ok(s.run('[...state.submissions.values()].every(value=>value.signature.length>192000)'));
+  const escaped=s.run('JSON.stringify({botDraft:state.botDraft,drafts:[...state.drafts],commands:[...state.commandDrafts],kinds:[...state.commandKinds],selected:[...state.selectedTasks],pending:[...state.submissions]})');
+  const reloaded=await setup(s);assert.equal(reloaded.run('JSON.stringify({botDraft:state.botDraft,drafts:[...state.drafts],commands:[...state.commandDrafts],kinds:[...state.commandKinds],selected:[...state.selectedTasks],pending:[...state.submissions]})'),escaped);assert.equal(reloaded.backend.calls.some(call=>call.method==='POST'),false);
 });
 
 test('storage quota failure retains the prior journal and in-tab drafts/IDs and warns even without a pending send',async()=>{
@@ -518,4 +519,20 @@ test('storage quota failure retains the prior journal and in-tab drafts/IDs and 
   s.backend.failNextTask=true;await s.submit('Keep in this tab');const id=s.backend.calls.filter(c=>c.method==='POST'&&c.pathname.endsWith('/tasks')).at(-1).body.messageId;
   assert.equal(s.run('state.submissions.get("task:"+state.botId).id'),id);assert.equal(s.session.get('chestnut.chat.v1'),prior);assert.equal(s.el('chat-recovery').hidden,false);
   const restored=await setup(s);assert.equal(restored.el('task-prompt').value,'Saved draft');
+});
+
+test('escaped task/Steer/follow-up sends retain their original IDs through reload and explicit retry',async()=>{
+  const text=String.fromCharCode(1).repeat(20000);
+  let s=await setup();await s.createBot();s.backend.failNextTask=true;await s.submit(text);
+  const first=s.backend.calls.filter(c=>c.method==='POST'&&c.pathname.endsWith('/tasks')).at(-1),postCount=s.backend.calls.filter(c=>c.method==='POST').length;
+  assert.ok(s.run('state.submissions.get("task:"+state.botId).signature.length')>120000);
+  s=await setup(s);assert.equal(s.el('task-prompt').value,text);assert.equal(s.run('state.submissions.get("task:"+state.botId).id'),first.body.messageId);assert.equal(s.backend.calls.filter(c=>c.method==='POST').length,postCount);
+  const task=await s.submit(text);assert.equal(s.backend.calls.filter(c=>c.method==='POST'&&c.pathname.endsWith('/tasks')).at(-1).body.messageId,first.body.messageId);task.state='running';await s.run('refresh()');
+  for(const type of ['steer','follow_up']){
+    s.run(`selectTask(${JSON.stringify(task.id)})`);await s.flush();await s.el(type==='steer'?'steer-tab':'follow-up-tab').emit('click');s.el('command-text').value=text;await s.el('command-text').emit('input');s.backend.failNextCommand=true;await s.el('command-form').emit('submit');
+    const call=s.backend.calls.filter(c=>c.method==='POST'&&c.pathname.endsWith('/commands')).at(-1),count=s.backend.calls.filter(c=>c.method==='POST').length;
+    assert.ok(s.run(`state.submissions.get('command:'+state.taskId+':${type}').signature.length`)>120000);
+    s=await setup(s);assert.equal(s.el('command-text').value,text);assert.equal(s.run(`state.submissions.get('command:'+state.taskId+':${type}').id`),call.body.messageId);assert.equal(s.backend.calls.filter(c=>c.method==='POST').length,count);
+    await s.el('command-form').emit('submit');assert.equal(s.backend.calls.filter(c=>c.method==='POST'&&c.pathname.endsWith('/commands')).at(-1).body.messageId,call.body.messageId);
+  }
 });
