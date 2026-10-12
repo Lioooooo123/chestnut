@@ -24,7 +24,7 @@ class Node {
   showModal() { this.open = true; }
   close() { this.open = false; }
 }
-async function setup() {
+async function setup(existing = {}) {
   const elements = new Map();
   const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
   for (const match of html.matchAll(/<([a-z]+)[^>]*\bid="([^"]+)"[^>]*>/g)) {
@@ -35,7 +35,9 @@ async function setup() {
   document.hidden = false; document.getElementById = (id) => { assert.ok(elements.has(id), `Missing element ${id}`); return elements.get(id); };
   document.createElement = (tag) => new Node(tag);
   document.querySelectorAll = (selector) => selector === '[data-command]' ? [elements.get('steer-tab'), elements.get('follow-up-tab')] : [];
-  const backend = { environments: new Map(), schedules: [], fires: [], auth: {connected:false,preferred:false,model:null,login:null,apiKeyConfigured:false}, authModels:[{id:'account-model',name:'Account model'}], bots: [], tasks: [], events: [], memories: [], maintenance: { job: {state:'succeeded',provider:'explicit-demo',automatic:true}, progress: {cursor:7,lastDreamAt:Date.now(),conflicts:[]} }, memoryVersion: 'a'.repeat(40), memoryEnabled: true, memoryProject: null, status: { mode: 'demo', capabilities: {serviceProfile:false,liveVerified:false,network:'none + governed HTTPS fetch',packageInstall:'operator allowlist'}, channels:{telegram:{enabled:false,configured:false,mode:'private-long-poll',botId:null,online:false,status:'disabled',lastSeen:null,lastError:null,deliveries:{}}}, worker: { online: true }, quarantines: [] }, calls: [], failNextTask: false, failNetwork: false };
+  const backend = existing.backend || { environments: new Map(), schedules: [], fires: [], auth: {connected:false,preferred:false,model:null,login:null,apiKeyConfigured:false}, authModels:[{id:'account-model',name:'Account model'}], bots: [], tasks: [], events: [], memories: [], maintenance: { job: {state:'succeeded',provider:'explicit-demo',automatic:true}, progress: {cursor:7,lastDreamAt:Date.now(),conflicts:[]} }, memoryVersion: 'a'.repeat(40), memoryEnabled: true, memoryProject: null, status: { mode: 'demo', capabilities: {serviceProfile:false,liveVerified:false,network:'none + governed HTTPS fetch',packageInstall:'operator allowlist'}, channels:{telegram:{enabled:false,configured:false,mode:'private-long-poll',botId:null,online:false,status:'disabled',lastSeen:null,lastError:null,deliveries:{}}}, worker: { online: true }, quarantines: [] }, calls: [], failNextTask: false, failNetwork: false };
+  backend.requests ||= new Map(); backend.botRequests ||= new Map();
+  const session = existing.session || new Map(), local = existing.local || new Map();
   const response = (payload, status = 200) => ({ ok: status < 400, status, json: async () => structuredClone(payload) });
   const task = (botId, prompt) => { const result = { id: webcrypto.randomUUID(), botId, prompt, state: 'queued', result: null, error: null, createdAt: Date.now(), updatedAt: Date.now() }; backend.tasks.unshift(result); return result; };
   const fetch = async (url, options = {}) => {
@@ -62,7 +64,10 @@ async function setup() {
     if (pathname === '/api/auth/callback') return response(backend.auth);
     if (pathname === '/api/status') return response(backend.status);
     if (pathname === '/api/bots' && method === 'GET') return response(backend.bots);
-    if (pathname === '/api/bots' && method === 'POST') { const bot = { id: webcrypto.randomUUID(), name: body.name, createdAt: Date.now() }; backend.bots.push(bot); return response(bot); }
+    if (pathname.startsWith('/api/bot-requests/')) return backend.botRequests.has(pathname.split('/').at(-1)) ? response(backend.botRequests.get(pathname.split('/').at(-1))) : response({error:'Not found'},404);
+    const receipt = pathname.match(/^\/api\/bots\/([^/]+)\/requests\/([^/]+)$/);
+    if (receipt) { const stored=backend.requests.get(`${receipt[1]}:${receipt[2]}`);return stored?response(stored):response({error:'Not found'},404); }
+    if (pathname === '/api/bots' && method === 'POST') { if(backend.failNextBot){backend.failNextBot=false;return response({error:'Bot not confirmed'},503);}const old=backend.botRequests.get(body.requestId);if(old)return old.name===body.name?response(old):response({error:'Different name'},409);const bot = { id: webcrypto.randomUUID(), name: body.name, createdAt: Date.now() }; backend.bots.push(bot);backend.botRequests.set(body.requestId,bot);if(backend.dropBotAck){backend.dropBotAck=false;throw new TypeError('Lost bot reply');}return response(bot); }
     if (environmentMatch) {
       const [, botId, action] = environmentMatch, environment = backend.environments.get(botId);
       if (method === 'GET') { if (backend.failEnvironment) return response({error:'Environment unavailable'},503); return response(environmentReply); }
@@ -99,16 +104,20 @@ async function setup() {
     if (action === 'events') return response(backend.events.filter((event) => event.taskId === taskId && event.seq > Number(url.split('after=')[1] || 0)));
     if (action === 'commands') {
       if (backend.failNextCommand) { backend.failNextCommand = false; return response({ error: 'Command not confirmed.' }, 503); }
-      if (body.type === 'follow_up') return response(task(botId, body.text));
+      const receiptKey=`${botId}:${body.messageId}`;const old=backend.requests.get(receiptKey);if(old)return response(old.response);
+      const result=body.type==='follow_up'?task(botId,body.text):{id:webcrypto.randomUUID(),...body};
       if (body.type === 'cancel') backend.tasks.find((entry) => entry.id === taskId).state = 'cancelling';
-      return response({ id: webcrypto.randomUUID(), ...body });
+      backend.requests.set(receiptKey,{payload:{kind:'command',taskId,type:body.type,text:body.text??null},response:result});
+      if(backend.dropCommandAck){backend.dropCommandAck=false;throw new TypeError('Lost command reply');}return response(result);
     }
     if (method === 'GET') return response(backend.tasks.filter((entry) => entry.botId === botId));
     if (backend.failNextTask) { backend.failNextTask = false; return response({ error: 'Try again later.' }, 503); }
-    return response(task(botId, body.prompt));
+    const receiptKey=`${botId}:${body.messageId}`;const old=backend.requests.get(receiptKey);if(old)return response(old.response);
+    const result=task(botId,body.prompt);backend.requests.set(receiptKey,{payload:{kind:'task',prompt:body.prompt},response:result});
+    if(backend.dropTaskAck){backend.dropTaskAck=false;throw new TypeError('Lost task reply');}return response(result);
   };
   const timers = new Map(); let nextTimer = 0;
-  const context = vm.createContext({ document, window: new Node('window'), navigator: { clipboard: { writeText: async () => {} } }, URL, localStorage: { getItem: () => null, setItem() {} }, crypto: webcrypto, fetch, AbortController, setTimeout: (fn, delay) => { const id = ++nextTimer; timers.set(id, { fn, delay }); return id; }, clearTimeout: (id) => timers.delete(id), console, TypeError });
+  const context = vm.createContext({ document, window: new Node('window'), navigator: { clipboard: { writeText: async () => {} } }, URL, localStorage: { getItem: key => local.get(key) || null, setItem: (key,value) => local.set(key,value) }, sessionStorage: {getItem:key=>session.get(key)||null,setItem:(key,value)=>session.set(key,value)}, crypto: webcrypto, fetch, AbortController, setTimeout: (fn, delay) => { const id = ++nextTimer; timers.set(id, { fn, delay }); return id; }, clearTimeout: (id) => timers.delete(id), console, TypeError });
   vm.runInContext(fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8'), context);
   const run = (source) => vm.runInContext(source, context);
   const flush = async () => { for (let i = 0; i < 200; i++) await Promise.resolve(); };
@@ -116,7 +125,7 @@ async function setup() {
   const el = (id) => elements.get(id);
   const createBot = async (name = 'Research companion') => { el('bot-name').value = name; await el('bot-form').emit('submit'); await flush(); return backend.bots.at(-1); };
   const submit = async (prompt = 'A thoughtful test task.') => { el('task-prompt').value = prompt; await el('task-form').emit('submit'); await flush(); return backend.tasks.at(0); };
-  return { run, flush, el, backend, createBot, submit, document, timers };
+  return { run, flush, el, backend, createBot, submit, document, timers, session, local };
 }
 
 test('empty workspace and create/select bot', async () => {
@@ -273,13 +282,13 @@ test('a failed Dreaming request stays visible and retry keeps the request ID', a
 });
 
 test('ChatGPT connection presents the official sign-in link and account models without credential inputs',async()=>{
- const s=await setup();await s.el('auth-connect').emit('click');await s.flush();assert.equal(s.el('auth-link').href,'https://auth.openai.com/api/accounts/authorize?state=test');assert.equal(s.el('auth-link').hidden,false);
+ const s=await setup();s.backend.status.mode='pi';await s.run('refresh()');await s.flush();await s.el('auth-connect').emit('click');await s.flush();assert.equal(s.el('auth-link').href,'https://auth.openai.com/api/accounts/authorize?state=test');assert.equal(s.el('auth-link').hidden,false);
  s.backend.auth={...s.backend.auth,connected:true,preferred:true,login:{state:'connected'}};await s.run('refreshAuth()');await s.flush();assert.match(s.el('auth-status').textContent,/Connected/);assert.equal(s.el('auth-model').hidden,false);
  await s.el('auth-disconnect').emit('click');await s.flush();assert.equal(s.backend.auth.connected,false);
 });
 
 test('a stale auth status cannot hide a newer sign-in link',async()=>{
- const s=await setup();let release;let waiting=false;let first=true;const gate=new Promise(r=>release=r);
+ const s=await setup();s.backend.status.mode='pi';await s.run('refresh()');await s.flush();let release;let waiting=false;let first=true;const gate=new Promise(r=>release=r);
  s.backend.beforeFetch=async({pathname,method})=>{if(pathname==='/api/auth'&&method==='GET'&&first){first=false;waiting=true;await gate;}};
  const old=s.run('refreshAuth()');for(let i=0;i<100&&!waiting;i++)await Promise.resolve();assert.equal(waiting,true);
  await s.el('auth-connect').emit('click');release();await old;await s.flush();assert.equal(s.el('auth-link').hidden,false);
@@ -440,4 +449,40 @@ test('unchanged schedule polling retains action nodes and keyboard focus targets
   const s=await setup();await s.createBot();await prepareSchedule(s);await s.el('schedule-form').emit('submit');
   const button=buttonsIn(s.el('schedule-list')).find(item=>item.textContent==='Pause');await s.run('refresh()');await s.flush();
   assert.equal(buttonsIn(s.el('schedule-list')).find(item=>item.textContent==='Pause'),button);
+});
+
+test('demo first use does not request or offer a model login',async()=>{
+  const s=await setup();assert.equal(s.el('auth-panel').hidden,true);await s.el('auth-connect').emit('click');await s.flush();assert.equal(s.backend.calls.some(c=>c.pathname.startsWith('/api/auth')),false);assert.equal(s.el('onboarding').hidden,false);
+});
+test('an unaccepted send survives reload with its exact request ID and without automatic POST',async()=>{
+  const s=await setup();await s.createBot();s.backend.failNextTask=true;await s.submit('Keep this through reload.');
+  const first=s.backend.calls.find(c=>c.method==='POST'&&c.pathname.endsWith('/tasks'));
+  const next=await setup(s);assert.equal(next.el('task-prompt').value,'Keep this through reload.');assert.equal(next.backend.calls.filter(c=>c.method==='POST'&&c.pathname.endsWith('/tasks')).length,1);assert.equal(next.el('chat-recovery').hidden,false);
+  await next.submit('Keep this through reload.');assert.equal(next.backend.calls.filter(c=>c.method==='POST'&&c.pathname.endsWith('/tasks')).at(-1).body.messageId,first.body.messageId);assert.equal(next.backend.tasks.length,1);
+});
+test('lost accepted task reply is reconciled read-only after reload, showing one durable result',async()=>{
+  const s=await setup();await s.createBot();s.backend.dropTaskAck=true;await s.submit('Accepted despite a lost reply.');const task=s.backend.tasks[0];task.state='succeeded';task.result='Demo result remains available.';
+  const next=await setup(s);await next.flush();assert.equal(next.el('task-prompt').value,'');assert.equal(next.el('detail-state').textContent,'Completed');assert.equal(next.el('task-result').textContent,task.result);assert.equal(next.backend.calls.filter(c=>c.method==='POST'&&c.pathname.endsWith('/tasks')).length,1);assert.equal(next.backend.tasks.length,1);
+});
+test('Bot create retry across reload keeps its creation UUID',async()=>{
+  const s=await setup();s.backend.failNextBot=true;await s.createBot('New companion');const first=s.backend.calls.find(c=>c.method==='POST'&&c.pathname==='/api/bots');
+  const next=await setup(s);await next.el('first-bot').emit('click');assert.equal(next.el('bot-name').value,'New companion');await next.createBot('New companion');assert.equal(next.backend.calls.filter(c=>c.method==='POST'&&c.pathname==='/api/bots').at(-1).body.requestId,first.body.requestId);assert.equal(next.backend.bots.length,1);
+});
+test('lost Bot creation acknowledgment resolves from its receipt without creating another Bot',async()=>{
+  const s=await setup();s.backend.dropBotAck=true;await s.createBot('One companion');const next=await setup(s);await next.flush();assert.equal(next.backend.bots.length,1);assert.equal(next.backend.calls.filter(c=>c.method==='POST'&&c.pathname==='/api/bots').length,1);assert.equal(next.run('state.botDraft'),'');
+});
+test('selected task and ordinary drafts survive reload; old steer text is never converted into follow-up',async()=>{
+  const s=await setup();await s.createBot();const first=await s.submit('First');await s.submit('Second');s.run(`selectTask(${JSON.stringify(first.id)})`);first.state='running';await s.run('refresh()');await s.el('steer-tab').emit('click');
+  s.el('task-prompt').value='An unsent fresh task.';await s.el('task-prompt').emit('input');s.el('command-text').value='An unsent direction.';await s.el('command-text').emit('input');first.state='succeeded';
+  const next=await setup(s);assert.equal(next.el('detail-prompt').textContent,'First');assert.equal(next.el('task-prompt').value,'An unsent fresh task.');assert.equal(next.el('command-text').value,'An unsent direction.');assert.equal(next.el('submit-command').disabled,true);assert.match(next.el('command-help').textContent,/no longer running/);
+  const count=next.backend.calls.filter(c=>c.pathname.endsWith('/commands')).length;await next.el('command-form').emit('submit');assert.equal(next.backend.calls.filter(c=>c.pathname.endsWith('/commands')).length,count);
+});
+test('failed result can prepare a new task without automatic execution or overwriting another draft',async()=>{
+  const s=await setup();await s.createBot();const task=await s.submit('Recover this task.');task.state='failed';task.error='Worker setup is unavailable.';await s.run('refresh()');
+  await s.el('reuse-task').emit('click');assert.equal(s.el('task-prompt').value,task.prompt);assert.equal(s.backend.tasks.length,1);await s.submit(task.prompt);assert.equal(s.backend.tasks.length,2);assert.notEqual(s.backend.tasks[0].id,task.id);assert.equal(task.state,'failed');
+  s.run(`selectTask(${JSON.stringify(task.id)})`);s.el('task-prompt').value='My other draft';await s.el('reuse-task').emit('click');assert.equal(s.el('task-prompt').value,'My other draft');assert.match(s.el('task-form-error').textContent,/existing draft is kept/);
+});
+test('chat journal excludes model callback/maintenance state and corrupt journals never execute requests',async()=>{
+  const s=await setup();s.run("state.auth={access:'credential-must-not-be-saved'};state.submissions.set('auth-callback',{id:'ignored',signature:'credential-must-not-be-saved'});saveChat()");assert.ok(!s.session.get('chestnut.chat.v1').includes('credential-must-not-be-saved'));
+  const bad=await setup({session:new Map([['chestnut.chat.v1','{broken']])});assert.equal(bad.el('onboarding').hidden,false);assert.equal(bad.backend.calls.some(c=>c.method==='POST'),false);
 });

@@ -10,6 +10,28 @@ import { config } from '../src/config.ts';
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+test('Bot creation receipts deduplicate and task/command receipts read current state without mutation',async()=>{
+  const s=new Store(':memory:'),api=createApi(s,config());
+  try{
+    const requestId=randomUUID(),b=JSON.parse((await request(api,'POST','/api/bots',{name:'Recovery',requestId})).body);
+    assert.equal(JSON.parse((await request(api,'POST','/api/bots',{name:'Recovery',requestId})).body).id,b.id);
+    assert.equal((await request(api,'POST','/api/bots',{name:'Different',requestId})).status,409);
+    assert.equal(JSON.parse((await request(api,'GET',`/api/bot-requests/${requestId}`)).body).id,b.id);
+    assert.equal((await request(api,'GET',`/api/bot-requests/${randomUUID()}`)).status,404);
+    const messageId=randomUUID(),t=s.submit(b.id,messageId,'one'),run=s.claim('fixture')!;
+    const steerId=randomUUID(),cmd=s.command(b.id,t.id,steerId,'steer','direction');
+    const sending=s.takeCommand(run)!;s.finishCommand(run,sending.id,true);s.finish(run,'succeeded','result',null);
+    const before=s.changes().length;
+    const receipt=JSON.parse((await request(api,'GET',`/api/bots/${b.id}/requests/${messageId}`)).body);
+    assert.equal(receipt.payload.prompt,'one');assert.equal(receipt.response.state,'succeeded');assert.equal(receipt.response.result,'result');
+    const command=JSON.parse((await request(api,'GET',`/api/bots/${b.id}/requests/${steerId}`)).body);
+    assert.equal(command.response.id,cmd.id);assert.equal(command.response.state,'sent_unconfirmed');
+    const other=s.createBot('Other');assert.equal((await request(api,'GET',`/api/bots/${other.id}/requests/${messageId}`)).status,404);
+    assert.equal((await request(api,'GET',`/api/bots/${b.id}/requests/not-a-uuid`)).status,400);
+    assert.equal(s.changes().length,before);assert.equal(s.tasks(b.id).length,1);
+  }finally{api.close();s.close();}
+});
 // Real Node HTTP parser/handler over paired in-memory streams. No OS listener.
 class MemorySocket extends Duplex {
   peer!:MemorySocket; connecting=false;

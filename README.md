@@ -4,7 +4,7 @@
 
 **本次已实现并测试：协议/记忆/OAuth修复、持久排期、Telegram私聊适配器、独立稳定Root环境、受控包安装/HTTPS读取和管理界面。真实Docker、在线模型/Telegram、包安装与服务连续性仍未验收，不能视为完整Memoh或可生产部署版本。** 默认保持受限的ephemeral profile。新service profile见[设计与边界](docs/service-profile.md)，必须完成[实机验收](docs/service-acceptance.md)。
 
-这次交付未部署、未登录或连接真实模型/Telegram。Pi 的完整官方源码已纳入 `vendor/pi/`，固定到 `4270522473e677ddba7b093caa0064a3df51d459`，不是换个名字调用 registry SDK。Dashboard 是无需构建的原生 JavaScript 客户端。先前版本曾在macOS完成无模型演示与基础Safari检查；它不能证明本次改动。当前实现仍以Linux为目标，最新验证与历史记录见 [docs/verification.md](docs/verification.md)。
+这次交付未部署、未登录或连接真实模型/Telegram。Pi 的完整官方源码已纳入 `vendor/pi/`，固定到 `4270522473e677ddba7b093caa0064a3df51d459`，不是换个名字调用 registry SDK。Dashboard 是无需构建的原生 JavaScript 客户端。本次在 macOS 完成无模型任务聊天、刷新和重启闭环及 Safari 检查；其模拟结果不能证明真实模型或 Linux 容器。当前实现仍以Linux为目标，最新验证与历史记录见 [docs/verification.md](docs/verification.md)。
 
 ## 先运行演示
 
@@ -13,11 +13,15 @@
 ```sh
 npm ci --ignore-scripts
 npm run demo       # 无需浏览器/端口，真实 SQLite + 独立 Worker 进程
-npm run dev        # API 与 Worker 两个进程
+npm run demo:ui    # 专用 .chestnut-demo 目录；不加载 .env，API 与 Worker 两个进程
 # 打开 http://127.0.0.1:4310
 ```
 
 Dashboard 支持创建/选择 Bot、任务提交、历史与结果、进度事件、Steer、Follow-up、Cancel。默认端口 4310，仅允许 loopback。V1 没有登录/多人权限，不支持直接暴露到公网。
+
+首次打开页面创建 Bot，再从任务聊天输入工作。演示默认每轮 10 秒，便于查看事件和操作；可用 `npm run demo:ui -- --data-dir /新的独立目录 --port 4310 --delay-ms 30000` 延长演示。Ctrl+C 停止，重启相同命令保留 Bot、任务和结果；入口拒绝真实模式或无法识别的已有数据目录。Demo 不显示模型登录，也不执行模型、工具、Shell、Docker 或渠道请求。
+
+浏览器同一标签页刷新后恢复聊天草稿、任务选择和未确认请求编号；已接收但回复丢失的请求只查询回执，不自动重发。未接收的请求需手动重试相同内容；修改内容意味着新请求，先检查历史。取消/失败/中断后可点击 **Use prompt for a new task** 复制草稿，审核后明确点击 Start。已结束任务的 Steer 草稿不会自动转为 Follow-up。会话存储受浏览器设置限制，关闭标签页可能丢失未发送草稿；服务端历史仍在 SQLite。完整闭环、复现和边界见 [MVP 验收](docs/mvp-acceptance.md)。
 
 ### 长期记忆
 

@@ -26,7 +26,7 @@ if(command==='doctor'){
   for(const child of children)child.on('exit',code=>{if(!ending){process.exitCode=code || 1;stop();}});
 }else if(command==='api'){
   const s=new Store(c.dbPath),server=createApi(s,c);
-  server.listen(c.port,c.host,()=>console.log(`Chestnut dashboard http://${c.host==='::1'?'[::1]':c.host}:${c.port} (${c.mode})`));
+  server.listen(c.port,c.host,()=>{const address=server.address();const port=typeof address==='object'&&address?address.port:c.port;console.log(`Chestnut dashboard http://${c.host==='::1'?'[::1]':c.host}:${port} (${c.mode})`);});
   const close=()=>server.close(()=>{s.close();process.exitCode=0;});process.once('SIGINT',close);process.once('SIGTERM',close);
 }else if(command==='worker'){
   const s=new Store(c.dbPath),worker=new Worker(s,c);

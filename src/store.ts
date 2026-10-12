@@ -9,6 +9,7 @@ export class Store {
     this.db = new DatabaseSync(path);
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA synchronous=FULL;
       CREATE TABLE IF NOT EXISTS bots(id TEXT PRIMARY KEY,name TEXT NOT NULL,createdAt INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS bot_requests(requestId TEXT PRIMARY KEY,name TEXT NOT NULL,botId TEXT NOT NULL REFERENCES bots(id));
       CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY,botId TEXT NOT NULL REFERENCES bots(id),prompt TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN ('queued','running','cancelling','succeeded','failed','cancelled','interrupted')),parentTaskId TEXT REFERENCES tasks(id),result TEXT,error TEXT,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS runs(fence INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT UNIQUE NOT NULL,taskId TEXT NOT NULL REFERENCES tasks(id),botId TEXT NOT NULL,workerId TEXT NOT NULL,token TEXT NOT NULL,state TEXT NOT NULL,leaseUntil INTEGER NOT NULL,startedAt INTEGER NOT NULL,finishedAt INTEGER);
       CREATE TABLE IF NOT EXISTS commands(id TEXT PRIMARY KEY,messageId TEXT NOT NULL,taskId TEXT NOT NULL REFERENCES tasks(id),botId TEXT NOT NULL,type TEXT NOT NULL,text TEXT,state TEXT NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL,UNIQUE(botId,messageId));
@@ -30,7 +31,19 @@ export class Store {
   tx<T>(fn: () => T): T { this.db.exec('BEGIN IMMEDIATE'); try { const value = fn(); this.db.exec('COMMIT'); return value; } catch (e) { this.db.exec('ROLLBACK'); throw e; } }
   bot(id: string): Bot { requireId(id); const value = this.get<Bot>('SELECT * FROM bots WHERE id=?', id); if (!value) throw new AppError(404, 'Bot not found'); return value; }
   task(botId: string, taskId: string): Task { this.bot(botId); requireId(taskId); const value = this.get<Task>('SELECT * FROM tasks WHERE botId=? AND id=?', botId, taskId); if (!value) throw new AppError(404, 'Task not found for this bot'); return value; }
-  createBot(name: string): Bot { requireText(name, 80); const bot = { id: randomUUID(), name: name.trim(), createdAt: Date.now() }; this.db.prepare('INSERT INTO bots VALUES (?,?,?)').run(bot.id, bot.name, bot.createdAt); return bot; }
+  createBot(name: string, requestId?: string): Bot {
+    requireText(name,80);const normalized=name.trim();
+    const create=()=>{const bot={id:randomUUID(),name:normalized,createdAt:Date.now()};this.db.prepare('INSERT INTO bots VALUES (?,?,?)').run(bot.id,bot.name,bot.createdAt);return bot;};
+    if(requestId===undefined)return create();requireId(requestId);
+    return this.tx(()=>{const previous=this.get<{name:string;botId:string}>('SELECT * FROM bot_requests WHERE requestId=?',requestId);if(previous){if(previous.name!==normalized)throw new AppError(409,'Bot request ID was already used for a different name');return this.bot(previous.botId);}const bot=create();this.db.prepare('INSERT INTO bot_requests VALUES (?,?,?)').run(requestId,normalized,bot.id);return bot;});
+  }
+  botReceipt(requestId:string):Bot {requireId(requestId);const receipt=this.get<{botId:string}>('SELECT botId FROM bot_requests WHERE requestId=?',requestId);if(!receipt)throw new AppError(404,'Bot request not found');return this.bot(receipt.botId);}
+  requestStatus(botId:string,messageId:string) {
+    this.bot(botId);requireId(messageId);const receipt=this.get<{payload:string;response:string}>('SELECT payload,response FROM requests WHERE botId=? AND messageId=?',botId,messageId);if(!receipt)throw new AppError(404,'Request not found for this bot');
+    const payload=JSON.parse(receipt.payload),original=JSON.parse(receipt.response);
+    const response=payload.kind==='task'||payload.type==='follow_up'?this.task(botId,original.id):this.get<Command>('SELECT * FROM commands WHERE botId=? AND id=?',botId,original.id);
+    if(!response)throw new AppError(404,'Request result not found');return {payload,response};
+  }
   bots() { return this.all<Bot>('SELECT * FROM bots ORDER BY createdAt,id'); }
   tasks(botId: string) { this.bot(botId); return this.all<Task>('SELECT * FROM tasks WHERE botId=? ORDER BY createdAt DESC,rowid DESC LIMIT 200', botId); }
   private idempotent<T>(botId: string, messageId: string, payload: unknown, action: () => T): T {

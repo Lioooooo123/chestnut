@@ -4,15 +4,17 @@ A build-free browser client. The API server serves `index.html`, `styles.css`, a
 
 ## Behavior
 
-- Create and switch between bots; drafts stay in memory when switching.
+- Create and switch between bots; chat drafts and selected tasks survive same-tab reload in session storage.
 - Submit tasks, inspect task-specific states, output, errors, and expandable events.
 - Steer running tasks at the next worker boundary; queue follow-ups as new tasks.
 - Disable follow-ups after cancellation or interruption; cancelled/interrupted work can be restarted from the main composer.
 - Request cancellation and wait for the server's actual terminal state.
 - Show demo mode, worker connectivity, request failures, and sandbox quarantines explicitly.
 - Poll every two seconds while visible. Keep existing history when a refresh fails.
-- Use a stable UUID to retry the same failed task or command in the current page. Duplicate clicks are disabled. Request IDs and drafts are not persisted across reloads.
-- Keep only the selected bot ID in local storage. There is no frontend token storage.
+- Retain stable UUIDs for ambiguous Bot/task/command sends across reload. Query durable server receipts read-only; never automatically resend a mutation. Manual unchanged retries reuse the original ID. Duplicate clicks are disabled.
+- Keep only the selected bot ID in local storage; a bounded chat-only journal uses session storage. It excludes model callbacks, credentials and maintenance state. Closing a tab may discard drafts; SQLite history remains.
+- Preserve expired Steer drafts without converting them into new work. Copy a terminal task prompt into a fresh composer without execution or overwriting another draft.
+- Hide model connection controls in explicit demo mode, which never reads auth status.
 - Render API and user text with `textContent`, never HTML.
 - Use native labels, keyboard focus, a modal dialog, and Ctrl/Cmd + Enter to submit.
 - Inspect per-bot Environment registry state and capability declarations, with explicit not-live-verified wording.
@@ -32,7 +34,7 @@ Run from the repository root:
 
 These are dependency-free, socket-free controller tests with a minimal DOM and a mocked API. They cover empty/create flows, duplicate submits, retry IDs, steering/follow-ups, cancellation, interrupted states, event cursors, safe text rendering, draft retention, offline/quarantine states, and polling visibility.
 
-The expanded management suite currently has 34 passing controller tests, including the original task/memory/auth tests. They are not real-browser or visual tests. Live browser verification was blocked in the earlier cloud build environment. The macOS closeout checked Safari desktop rendering, Bot creation, task submission, running status and final result against the loopback model-less API/Worker with sample data. Mobile rendering, other browsers and real-model interaction remain unverified; see `docs/verification.md`.
+The suite has 42 passing controller tests, including reload, lost acknowledgments, creation deduplication and expired Steer recovery. They are not real-browser or visual tests. The latest macOS pass separately exercised Safari Bot creation, task/Steer/Follow-up/Cancel, same-tab draft reload, API/Worker restart and history recovery, plus 320/390px read-only WebKit frames. These are simulated tasks, not real AI or real phone hardware; see `docs/mvp-acceptance.md` and `docs/verification.md`.
 
 
 ## New management UI verification

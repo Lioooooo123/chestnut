@@ -1,5 +1,9 @@
 # Verification report
 
+## Latest local task-chat MVP after 3263d6c
+
+See [MVP acceptance](mvp-acceptance.md) for reproducible first use, reload/retry semantics and detailed evidence. The guarded macOS check passed **317 tests: 307 passed, 0 failed, 10 explicit Linux OS-lock skips**. The new real loopback test exercised separate CLI API/Worker processes, durable creation/task/command receipts, Steer, follow-up, cancellation and stop/restart. Safari actual controls and same-tab drafts/history were checked; 320/390px read-only WebKit frames were inspected. Strict TypeScript, model-less Worker smoke, all 2029 pinned Pi files/license and 14 local links passed. Lost browser acknowledgments are mocked-controller coverage; Docker, Linux root services and live models/channels remain unverified. Earlier sections are historical results.
+
 ## Offline deployment preparation after 864cd37
 
 The remote baseline was rechecked unchanged at `864cd37cbe0ef883398bd3a21c5aa142a3eedc9f`; existing user commits and the earlier checkout were preserved. Added a read-only host preflight, a guarded reusable offline acceptance entry, an opt-in model-less Linux/Docker entry and [startup/recovery runbook](deployment-runbook.md). Default Docker entry prints a plan without contacting Docker; execution refuses existing data, remote daemon routes and unsuitable rootless/resource/image prerequisites. It freezes the inspected immutable image, scopes cleanup to its own new Bot identities, retains rootfs/evidence and treats uncertain cleanup as failure.

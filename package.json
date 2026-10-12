@@ -21,7 +21,8 @@
     "pi:verify": "node scripts/pi-verify-source.mjs && node scripts/pi-check-resolutions.mjs",
     "pi:contracts": "bash scripts/pi-contract.sh",
     "pi:build": "bash scripts/pi-build.sh",
-    "demo": "node scripts/demo.mjs"
+    "demo": "node scripts/demo.mjs",
+    "demo:ui": "node scripts/demo-ui.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

@@ -7,7 +7,9 @@ const state = {
   status: null, connected: false, bots: [], botId: null, tasks: [], taskId: null,
   events: new Map(), drafts: new Map(), commandDrafts: new Map(),
   submissions: new Map(), commandType: 'follow_up', refreshing: false,
+  selectedTasks: new Map(), commandKinds: new Map(), botDraft: '', reconciling: false, chatStored:true,
   refreshAgain: false, botRevision: 0, eventTaskId: null,
+  botMutationRevision: 0,
   busy: { bot: false, task: false, command: false }, tasksLoaded: false,
   auth:null,authBusy:false,authModels:[],authRevision:0,authModelsAt:0,
 view: 'tasks', memory: null, maintenance: null, maintenanceError: null, maintenanceBusy: false, memoryProposalSource: null, memoryId: null, memoryRevision: null, memorySettingsVersion: null, memorySettingsDirty: false, memoryBusy: false, memoryDrafts: new Map(),
@@ -25,6 +27,48 @@ let taskListSignature = '';
 let botListSignature = '';
 let eventSignature = '';
 let scheduleSignature = '';
+const CHAT_STORAGE = 'chestnut.chat.v1';
+const chatKey = key => key === 'bot-create' || /^(task|command):/.test(key);
+function saveChat() {
+  try { sessionStorage.setItem(CHAT_STORAGE, JSON.stringify({version:1,botDraft:state.botDraft,drafts:[...state.drafts].slice(-20),commands:[...state.commandDrafts].slice(-30),kinds:[...state.commandKinds].slice(-30),selected:[...state.selectedTasks].slice(-20),pending:[...state.submissions].filter(([key])=>chatKey(key)).slice(-30)}));state.chatStored=true; }
+  catch { state.chatStored=false; }
+}
+function restoreChat() {
+  try {
+    const raw=sessionStorage.getItem(CHAT_STORAGE);if(!raw||raw.length>2000000)return;
+    const saved=JSON.parse(raw);if(saved.version!==1)return;
+    const strings=(rows,max)=>new Map(Array.isArray(rows)?rows.slice(-max).filter(row=>Array.isArray(row)&&row.length===2&&typeof row[0]==='string'&&row[0].length<200&&typeof row[1]==='string'&&row[1].length<=32000):[]);
+    state.drafts=strings(saved.drafts,20);state.commandDrafts=strings(saved.commands,30);state.selectedTasks=strings(saved.selected,20);
+    state.commandKinds=new Map([...strings(saved.kinds,30)].filter(([,kind])=>['steer','follow_up'].includes(kind)));
+    state.botDraft=typeof saved.botDraft==='string'?saved.botDraft.slice(0,80):'';
+    for(const row of Array.isArray(saved.pending)?saved.pending.slice(-30):[]){if(!Array.isArray(row)||row.length!==2)continue;const [key,value]=row;if(typeof key==='string'&&chatKey(key)&&typeof value?.signature==='string'&&value.signature.length<=100000&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.id)){const payload=JSON.parse(value.signature);if(payload&&typeof payload==='object'&&!Array.isArray(payload))state.submissions.set(key,value);}}
+  } catch { /* Corrupt or older storage never causes a request to be executed. */ }
+}
+restoreChat();
+function clearSubmission(key){state.submissions.delete(key);if(chatKey(key))saveChat();}
+async function reconcileChat(botId,revision) {
+  if(state.reconciling)return;state.reconciling=true;
+  // Read receipts only. A reload, reconnect or retry timer never resends a mutation.
+  try{await Promise.all([...state.submissions].filter(([key])=>chatKey(key)).map(async([key,record])=>{
+    const payload=JSON.parse(record.signature);if(key!=='bot-create'&&payload.botId!==botId)return;
+    try {
+      const receipt=await api(key==='bot-create'?`/api/bot-requests/${encodeURIComponent(record.id)}`:`/api/bots/${encodeURIComponent(botId)}/requests/${encodeURIComponent(record.id)}`);
+      if(revision!==state.botRevision||botId!==state.botId||state.submissions.get(key)?.id!==record.id)return;
+      if(key==='bot-create'){
+        if(receipt.name!==payload.name)return;
+        if(state.botDraft.trim()===payload.name)state.botDraft='';
+        if($('bot-name').value.trim()===payload.name)$('bot-name').value='';
+      }else if(key.startsWith('task:')){
+        if(receipt.payload?.kind!=='task'||receipt.payload.prompt!==payload.prompt)return;
+        if((state.drafts.get(botId)||'').trim()===payload.prompt){state.drafts.delete(botId);if($('task-prompt').value.trim()===payload.prompt)$('task-prompt').value='';}
+      }else{
+        if(receipt.payload?.kind!=='command'||receipt.payload.taskId!==payload.taskId||receipt.payload.type!==payload.type||receipt.payload.text!==(payload.text??null))return;
+        if(payload.type!=='cancel'&&receipt.response?.state!=='uncertain'&&(state.commandDrafts.get(payload.taskId)||'').trim()===payload.text){state.commandDrafts.delete(payload.taskId);if(state.taskId===payload.taskId&&$('command-text').value.trim()===payload.text)$('command-text').value='';}
+      }
+      clearSubmission(key);renderControls();toast('Previous send confirmed in server history. No request was resent.');
+    }catch{/* Missing receipt or offline server: keep the original ID for an explicit retry. */}
+  }));}finally{state.reconciling=false;}
+}
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -47,6 +91,7 @@ function submission(key, payload) {
   if (previous?.signature === signature) return previous.id;
   const id = uuid();
   state.submissions.set(key, { signature, id });
+  if(chatKey(key))saveChat();
   return id;
 }
 async function api(path, options = {}) {
@@ -66,7 +111,7 @@ async function api(path, options = {}) {
     catch { throw new Error(`The server returned an unreadable response (${response.status}).`); }
     if (!response.ok) {
       const message = typeof payload.error === 'string' ? payload.error : payload.error?.message || payload.message;
-      throw new Error(message || `The request failed (${response.status}).`);
+      const error=new Error(message || `The request failed (${response.status}).`);error.status=response.status;throw error;
     }
     return payload;
   } catch (error) {
@@ -127,6 +172,7 @@ function renderStatus() {
     $('composer-hint').textContent = 'One task at a time in this workspace.';
   }
   renderTelegram();
+  renderAuth();
 }
 function renderBots() {
   const signature = JSON.stringify([state.bots, state.botId]);
@@ -247,7 +293,6 @@ function renderControls() {
   $('create-bot-submit').textContent = state.busy.bot ? 'Creating…' : 'Create bot ↗';
   const canSteer = task?.state === 'running';
   const canFollowUp = !!task && !['cancelled', 'interrupted', 'cancelling'].includes(task.state);
-  if (!canSteer && state.commandType === 'steer') state.commandType = 'follow_up';
   $('steer-tab').disabled = !canSteer || state.busy.command;
   $('steer-tab').title = canSteer ? 'Apply a direction at the next worker boundary' : 'Steering is available while a task is running';
   $('follow-up-tab').disabled = !canFollowUp || state.busy.command;
@@ -255,14 +300,18 @@ function renderControls() {
     const active = tab.dataset.command === state.commandType;
     tab.classList.toggle('active', active); tab.setAttribute('aria-pressed', String(active));
   }
-  $('command-help').textContent = !canFollowUp ? 'Use the main composer to start a fresh task. Follow-ups are unavailable after cancellation or interruption.' : state.commandType === 'steer' ? 'Send a direction for the next worker boundary. It may not apply if the task finishes first.' : 'Queue a new task for this bot. This does not change the selected task.';
+  $('command-help').textContent = !canFollowUp ? 'Use the main composer to start a fresh task. Follow-ups are unavailable after cancellation or interruption.' : state.commandType === 'steer' ? canSteer ? 'Send a direction for the next worker boundary. It may not apply if the task finishes first.' : 'This task is no longer running. Your direction is kept; switch to New follow-up explicitly or start a new task.' : 'Queue a new task for this bot. This does not change the selected task.';
   $('command-text').placeholder = state.commandType === 'steer' ? 'Add a direction for the current task…' : 'What would you like to do next?';
   $('command-text').readOnly = state.busy.command || !canFollowUp;
   $('submit-command').textContent = state.busy.command ? 'Sending…' : state.commandType === 'steer' ? 'Send direction ↗' : 'Queue follow-up ↗';
-  $('submit-command').disabled = !task || !canFollowUp || state.busy.command || !$('command-text').value.trim();
+  $('submit-command').disabled = !task || !canFollowUp || (state.commandType==='steer'&&!canSteer) || state.busy.command || !$('command-text').value.trim();
   $('cancel-task').hidden = !task || !ACTIVE.has(task.state);
   $('cancel-task').disabled = state.busy.command || task?.state === 'cancelling';
   $('cancel-task').textContent = task?.state === 'cancelling' ? 'Cancelling…' : 'Cancel task';
+  $('reuse-task').hidden=!task||ACTIVE.has(task.state);$('reuse-task').disabled=state.busy.task;
+  const pending=[...state.submissions].filter(([key,value])=>chatKey(key)&&(key==='bot-create'||JSON.parse(value.signature).botId===state.botId));
+  $('chat-recovery').hidden=!pending.length||state.busy.task||state.busy.command||state.busy.bot;
+  $('chat-recovery').textContent=state.chatStored?'An unconfirmed send is kept for refresh. Check history, or retry the unchanged text with its original request ID. Nothing is resent automatically.':'Browser session storage is unavailable. Keep this tab open until the send is confirmed. Server history still persists; nothing is resent automatically.';
 }
 function selectBot(id) {
   if (state.botId) rememberMemoryDraft();
@@ -270,6 +319,7 @@ function selectBot(id) {
   rememberManagementDrafts();
   if (state.botId) state.drafts.set(state.botId, $('task-prompt').value);
   if (state.taskId) state.commandDrafts.set(state.taskId, $('command-text').value);
+  saveChat();
   state.botId = id; state.taskId = null; state.tasks = []; state.tasksLoaded = false; state.botRevision++;
   resetManagement();
   state.memory = null; state.maintenance = null; state.maintenanceError = null; state.memoryId = null; state.memoryRevision = null; state.memorySettingsVersion = null; state.memorySettingsDirty = false;
@@ -282,6 +332,7 @@ function selectBot(id) {
 function selectTask(id) {
   if (state.taskId) state.commandDrafts.set(state.taskId, $('command-text').value);
   state.taskId = id; state.commandType = 'follow_up';
+  state.commandType=state.commandKinds.get(id)||'follow_up';if(state.botId)state.selectedTasks.set(state.botId,id);saveChat();
   renderTaskMemory();
   $('command-text').value = state.commandDrafts.get(id) || '';
   setError('command-error'); setError('event-error');
@@ -303,21 +354,24 @@ async function fetchEvents(botId, taskId) {
 }
 async function refresh() {
   if (state.refreshing) { state.refreshAgain = true; return; }
-  state.refreshing = true; clearTimeout(pollTimer); void refreshAuth();
+  state.refreshing = true; clearTimeout(pollTimer);
+  const botMutationRevision=state.botMutationRevision;
   try {
     const [status, bots] = await Promise.all([api('/api/status'), api('/api/bots')]);
     if (!Array.isArray(bots)) throw new Error('The server returned an invalid bot list.');
-    state.status = status; state.bots = bots; state.connected = true;
+    state.status = status;if(botMutationRevision===state.botMutationRevision)state.bots=bots;else state.refreshAgain=true;state.connected = true;
+    void refreshAuth();
     $('connection-error').hidden = true;
-    if (!bots.some((bot) => bot.id === state.botId)) {
+    if (!state.bots.some((bot) => bot.id === state.botId)) {
       let remembered;
       try { remembered = localStorage.getItem('chestnut.selectedBot'); } catch { /* storage is optional */ }
-      state.botId = bots.find((bot) => bot.id === remembered)?.id || bots[0]?.id || null;
+      state.botId = state.bots.find((bot) => bot.id === remembered)?.id || state.bots[0]?.id || null;
       state.tasks = []; state.taskId = null; state.botRevision++; state.tasksLoaded = false;
       resetManagement();
       $('task-prompt').value = state.drafts.get(state.botId) || '';
     }
     renderStatus(); renderBots();
+    void reconcileChat(state.botId,state.botRevision);
     if (state.botId) {
       const botId = state.botId; const revision = state.botRevision;
       const tasks = await api(botPath(botId));
@@ -325,7 +379,8 @@ async function refresh() {
       if (botId === state.botId && revision === state.botRevision) {
         state.tasks = tasks; state.tasksLoaded = true;
         if (!tasks.some((task) => task.id === state.taskId)) {
-          state.taskId = [...tasks].sort((a, b) => (dateValue(b.createdAt)?.getTime() || 0) - (dateValue(a.createdAt)?.getTime() || 0))[0]?.id || null;
+          const remembered=state.selectedTasks.get(botId);state.taskId = tasks.find(task=>task.id===remembered)?.id||[...tasks].sort((a, b) => (dateValue(b.createdAt)?.getTime() || 0) - (dateValue(a.createdAt)?.getTime() || 0))[0]?.id || null;
+          state.commandType=state.commandKinds.get(state.taskId)||'follow_up';
           $('command-text').value = state.commandDrafts.get(state.taskId) || '';
         }
         renderTasks(); renderDetail();
@@ -349,35 +404,40 @@ async function refresh() {
 }
 function openBotDialog() {
   if (state.busy.bot) return;
-  setError('bot-form-error'); $('bot-dialog').showModal(); $('bot-name').focus();
+  $('bot-name').value=state.botDraft;setError('bot-form-error'); $('bot-dialog').showModal(); $('bot-name').focus();
 }
 $('new-bot').addEventListener('click', openBotDialog);
 $('first-bot').addEventListener('click', openBotDialog);
 $('close-dialog').addEventListener('click', () => $('bot-dialog').close());
 $('bot-dialog').addEventListener('cancel', (event) => { if (state.busy.bot) event.preventDefault(); });
+$('bot-name').addEventListener('input',()=>{state.botDraft=$('bot-name').value;saveChat();});
 $('bot-form').addEventListener('submit', async (event) => {
   event.preventDefault(); if (state.busy.bot) return;
   const name = $('bot-name').value.trim(); if (!name) { $('bot-name').focus(); return; }
+  state.botDraft=$('bot-name').value;const requestId=submission('bot-create',{name});
   state.busy.bot = true; renderControls(); setError('bot-form-error');
   try {
-    const bot = await post('/api/bots', { name });
+    const bot = await post('/api/bots', { name,requestId });
     if (!bot.id) throw new Error('The server did not return the new bot. Refresh before trying again.');
     state.bots = [...state.bots.filter((entry) => entry.id !== bot.id), bot];
+    state.botMutationRevision++;
+    state.botDraft='';clearSubmission('bot-create');
     $('bot-name').value = ''; $('bot-dialog').close(); selectBot(bot.id); toast(`${bot.name} is ready.`);
-  } catch (error) { setError('bot-form-error', `${error.message} If the request was interrupted, close this window and check the bot list before creating another.`); }
+  } catch (error) { setError('bot-form-error', `${error.message} Your name and request ID are kept for refresh. Check the bot list or retry the same name.`); }
   finally { state.busy.bot = false; renderControls(); }
 });
-$('task-prompt').addEventListener('input', () => { if (state.botId) state.drafts.set(state.botId, $('task-prompt').value); renderControls(); });
+$('task-prompt').addEventListener('input', () => { if (state.botId) state.drafts.set(state.botId, $('task-prompt').value);saveChat(); renderControls(); });
 $('task-form').addEventListener('submit', async (event) => {
   event.preventDefault(); if (state.busy.task || !state.botId) return;
   const prompt = $('task-prompt').value.trim(); if (!prompt) return;
   const botId = state.botId; const key = `task:${botId}`;
+  state.drafts.set(botId,$('task-prompt').value);
   const messageId = submission(key, { botId, prompt });
   state.busy.task = true; renderControls(); setError('task-form-error');
   try {
     const task = await post(botPath(botId), { messageId, prompt });
     if (!task.id) throw new Error('The server did not return the task. Your prompt is kept here so you can retry safely.');
-    state.submissions.delete(key); state.drafts.delete(botId);
+    state.drafts.delete(botId);clearSubmission(key);
     if (state.botId === botId) {
       $('task-prompt').value = '';
       state.tasks = [...state.tasks.filter((entry) => entry.id !== task.id), task]; state.tasksLoaded = true;
@@ -385,12 +445,12 @@ $('task-form').addEventListener('submit', async (event) => {
     }
     toast('Task added to the queue.'); refresh();
   } catch (error) {
-    if (state.botId === botId) setError('task-form-error', `${error.message} Your prompt is kept here. Retrying the same prompt in this page reuses its message ID.`);
+    if (state.botId === botId) setError('task-form-error', `${error.message} Your prompt and message ID are kept for refresh. Check history or retry the unchanged prompt.`);
     else toast(`Task was not confirmed: ${error.message}`);
   } finally { state.busy.task = false; renderControls(); }
 });
-$('command-text').addEventListener('input', () => { if (state.taskId) state.commandDrafts.set(state.taskId, $('command-text').value); renderControls(); });
-for (const tab of document.querySelectorAll('[data-command]')) tab.addEventListener('click', () => { state.commandType = tab.dataset.command; renderControls(); });
+$('command-text').addEventListener('input', () => { if (state.taskId) state.commandDrafts.set(state.taskId, $('command-text').value);saveChat(); renderControls(); });
+for (const tab of document.querySelectorAll('[data-command]')) tab.addEventListener('click', () => { state.commandType = tab.dataset.command;if(state.taskId)state.commandKinds.set(state.taskId,state.commandType);saveChat(); renderControls(); });
 async function sendCommand(type) {
   const task = currentTask(); if (!task || state.busy.command) return;
   if (type === 'steer' && task.state !== 'running') return;
@@ -398,12 +458,13 @@ async function sendCommand(type) {
   if (type === 'cancel' && !['queued', 'running'].includes(task.state)) return;
   const text = type === 'cancel' ? undefined : $('command-text').value.trim(); if (type !== 'cancel' && !text) return;
   const botId = state.botId; const taskId = task.id; const key = `command:${taskId}:${type}`;
+  if(type!=='cancel'){state.commandDrafts.set(taskId,$('command-text').value);state.commandKinds.set(taskId,type);}
   const messageId = submission(key, { botId, taskId, type, text });
   state.busy.command = true; renderControls(); setError('command-error');
   try {
     const response = await post(`${taskPath(botId, taskId)}/commands`, { messageId, type, ...(text === undefined ? {} : { text }) });
-    state.submissions.delete(key);
     if (type !== 'cancel') state.commandDrafts.delete(taskId);
+    clearSubmission(key);
     if (state.botId === botId && state.taskId === taskId && type !== 'cancel') $('command-text').value = '';
     if (type === 'follow_up') {
       const newTask = response.task || response;
@@ -421,12 +482,13 @@ async function sendCommand(type) {
     }
     refresh();
   } catch (error) {
-    if (state.botId === botId && state.taskId === taskId) setError('command-error', `${error.message} Retrying the same command in this page reuses its message ID.`);
+    if (state.botId === botId && state.taskId === taskId) setError('command-error', `${error.message} The original command ID is kept for refresh; its type is not changed automatically.`);
     else toast(`Command was not confirmed: ${error.message}`);
   } finally { state.busy.command = false; renderControls(); }
 }
 $('command-form').addEventListener('submit', (event) => { event.preventDefault(); sendCommand(state.commandType); });
 $('cancel-task').addEventListener('click', () => sendCommand('cancel'));
+$('reuse-task').addEventListener('click',()=>{const task=currentTask();if(!task||ACTIVE.has(task.state)||state.busy.task)return;if(state.submissions.has(`task:${state.botId}`)){setError('task-form-error','Confirm or retry the pending send before starting a fresh task.');return;}if($('task-prompt').value.trim()&&$('task-prompt').value.trim()!==task.prompt){setError('task-form-error','Your existing draft is kept. Clear it before copying this task prompt.');return;}$('task-prompt').value=task.prompt;state.drafts.set(state.botId,task.prompt);saveChat();setView('tasks');renderControls();$('task-prompt').focus();toast('Prompt copied for a new task. Review it and press Start task explicitly.');});
 $('copy-task-id').addEventListener('click', async () => {
   if (!state.taskId) return;
   try { await navigator.clipboard.writeText(state.taskId); toast('Task ID copied.'); }
@@ -435,6 +497,7 @@ $('copy-task-id').addEventListener('click', async () => {
 $('retry-connection').addEventListener('click', refresh);
 document.addEventListener('visibilitychange', () => { clearTimeout(pollTimer); if (!document.hidden) refresh(); });
 window.addEventListener('online', refresh);
+window.addEventListener('pagehide',()=>{if(state.botId)state.drafts.set(state.botId,$('task-prompt').value);if(state.taskId)state.commandDrafts.set(state.taskId,$('command-text').value);saveChat();});
 
 const memoryPath = (botId = state.botId) => `/api/bots/${encodeURIComponent(botId)}/memory`;
 function setView(view) {
@@ -555,6 +618,7 @@ async function changeMemory(method, suffix, payload) {
   finally { state.memoryBusy = false; renderMemory(); }
 }
 function renderAuth(){
+  const pi=state.status?.mode==='pi';$('auth-panel').hidden=!pi;if(!pi)return;
   const auth=state.auth;const pending=['starting','awaiting'].includes(auth?.login?.state);
   $('auth-status').textContent=!auth?'Checking model access…':auth.connected?'Connected to ChatGPT'+(auth.model?` · ${auth.model}`:' · Select a model'):pending?'Complete ChatGPT sign-in in your browser.':auth.apiKeyConfigured&&!auth.preferred?'An API key is configured for the outer worker.':'Connect ChatGPT to run real Pi tasks.';
   $('auth-connect').disabled=state.authBusy||pending;$('auth-connect').hidden=!!auth?.connected;
@@ -567,6 +631,7 @@ function renderAuth(){
   if(auth?.login?.error)setError('auth-error',auth.login.error);
 }
 async function refreshAuth(){
+  if(state.status?.mode==='demo'){state.auth=null;setError('auth-error');renderAuth();return;}
   const revision=state.authRevision;
   try{const auth=await api('/api/auth');if(revision!==state.authRevision)return;
     if(auth.login?.id!==state.auth?.login?.id){state.authModels=[];state.authModelsAt=0;}state.auth=auth;
@@ -578,6 +643,7 @@ async function refreshAuth(){
   }catch(error){setError('auth-error',error.message);}
 }
 async function changeAuth(method,path,payload={}){
+  if(state.status?.mode==='demo')return;
   if(state.authBusy)return;state.authRevision++;state.authBusy=true;renderAuth();setError('auth-error');
   try{const result=await api(path,{method,body:JSON.stringify(payload)});if(path==='/api/auth/callback'||method==='DELETE')$('auth-callback-url').value='';state.auth=result;state.authModels=[];}
   catch(error){setError('auth-error',error.message);}

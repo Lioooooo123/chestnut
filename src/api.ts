@@ -44,8 +44,12 @@ export function createApi(store:Store,c:Config,dependencies:{oauthFlow?:OAuthFlo
       if(url.pathname==='/api/events' && req.method==='GET'){send(res,200,store.changes(cursor(url)));return;}
       if(url.pathname==='/api/bots') {
         if(req.method==='GET'){send(res,200,store.bots());return;}
-        if(req.method==='POST'){const b=await body(req);send(res,201,store.createBot(b.name as string));return;}
+        if(req.method==='POST'){const b=await body(req);send(res,201,store.createBot(b.name as string,b.requestId as string|undefined));return;}
       }
+      const botReceipt=/^\/api\/bot-requests\/([^/]+)$/.exec(url.pathname);
+      if(botReceipt&&req.method==='GET'){send(res,200,store.botReceipt(botReceipt[1]!));return;}
+      const receipt=/^\/api\/bots\/([^/]+)\/requests\/([^/]+)$/.exec(url.pathname);
+      if(receipt&&req.method==='GET'){send(res,200,store.requestStatus(receipt[1]!,receipt[2]!));return;}
       const envMatch=/^\/api\/bots\/([^/]+)\/environment$/.exec(url.pathname);
       if(envMatch&&req.method==='GET'){const botId=envMatch[1]!;send(res,200,{...(store.environment(botId)??{botId,profile:c.sandboxProfile,state:'unprovisioned'}),policy:policies.get(botId),stop:policies.stopStatus(botId),verification:'not-live-verified'});return;}
       const policyMatch=/^\/api\/bots\/([^/]+)\/environment\/(policy|stop|reconcile)$/.exec(url.pathname);

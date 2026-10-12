@@ -1,6 +1,7 @@
 node_modules/
 .env
 .chestnut/
+.chestnut-demo/
 coverage/
 *.log
 vendor/pi/node_modules/
