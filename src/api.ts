@@ -2,6 +2,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
+import { Scheduler, type ScheduleInput } from './schedules.ts';
+import { EnvironmentPolicies } from './environments/policy.ts';
+import { telegramReadiness } from './channels/telegram.ts';
 import { Store } from './store.ts';
 import { AppError } from './types.ts';
 import { AuthManager, type OAuthFlow } from './auth.ts';
@@ -12,6 +15,7 @@ const webRoot=fileURLToPath(new URL('../web/',import.meta.url));
 function send(res:ServerResponse,status:number,data:unknown) {res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(data));}
 async function body(req:IncomingMessage) { if(!req.headers['content-type']?.startsWith('application/json'))throw new AppError(415,'Use application/json'); req.setEncoding('utf8'); let text=''; for await(const chunk of req){text+=chunk; if(Buffer.byteLength(text)>65536)throw new AppError(413,'Request too large');} try {const parsed=JSON.parse(text); if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw 0; return parsed as Record<string,unknown>;}catch{throw new AppError(400,'Invalid JSON object');} }
 export function createApi(store:Store,c:Config,dependencies:{oauthFlow?:OAuthFlow;authFetch?:typeof fetch}={}) {
+  const scheduler=new Scheduler(store),policies=new EnvironmentPolicies(store);
   let auth:AuthManager|undefined;
   let memory: MemoryRepository | undefined;
   let maintenance: MemoryMaintenance | undefined;
@@ -36,14 +40,32 @@ export function createApi(store:Store,c:Config,dependencies:{oauthFlow?:OAuthFlo
         if(req.method==='DELETE'&&url.pathname==='/api/auth'){send(res,200,await auth.logout());return;}
         throw new AppError(405,'Method not allowed');
       }
-      if(url.pathname==='/api/status' && req.method==='GET') {send(res,200,{mode:c.mode,sandboxProfile:c.sandboxProfile,experimental:c.sandboxProfile==='persistent',worker:store.workerStatus(),concurrency:1,quarantines:store.quarantines(),isolation:c.mode==='demo'?'none (model-less; no shell or network)':'rootless Docker, network none',version:'0.1.0'});return;}
+      if(url.pathname==='/api/status' && req.method==='GET') {send(res,200,{mode:c.mode,sandboxProfile:c.sandboxProfile,experimental:c.sandboxProfile!=='ephemeral',worker:store.workerStatus(),concurrency:1,quarantines:store.quarantines(),isolation:c.mode==='demo'?'none (model-less; no shell or network)':'rootless Docker, network none',version:'0.2.0-dev',capabilities:{serviceProfile:c.sandboxProfile==='service',liveVerified:false,network:'none + governed HTTPS fetch',packageInstall:'operator allowlist'},channels:{telegram:telegramReadiness(store)}});return;}
       if(url.pathname==='/api/events' && req.method==='GET'){send(res,200,store.changes(cursor(url)));return;}
       if(url.pathname==='/api/bots') {
         if(req.method==='GET'){send(res,200,store.bots());return;}
         if(req.method==='POST'){const b=await body(req);send(res,201,store.createBot(b.name as string));return;}
       }
       const envMatch=/^\/api\/bots\/([^/]+)\/environment$/.exec(url.pathname);
-      if(envMatch&&req.method==='GET'){send(res,200,store.environment(envMatch[1]!));return;}
+      if(envMatch&&req.method==='GET'){const botId=envMatch[1]!;send(res,200,{...(store.environment(botId)??{botId,profile:c.sandboxProfile,state:'unprovisioned'}),policy:policies.get(botId),stop:policies.stopStatus(botId),verification:'not-live-verified'});return;}
+      const policyMatch=/^\/api\/bots\/([^/]+)\/environment\/(policy|stop|reconcile)$/.exec(url.pathname);
+      if(policyMatch){const [,botId,action]=policyMatch;store.bot(botId!);const b=await body(req);
+        if(action==='policy'&&req.method==='PUT'){send(res,200,policies.set(botId!,b as any));return;}
+        if(action==='stop'&&req.method==='POST'){if(c.sandboxProfile!=='service')throw new AppError(409,'Environment stop requires service profile');
+          const admitted=policies.requestStop(botId!,b.requestId as string);if(!admitted.replayed){const active=store.tasks(botId!).find(task=>['running','cancelling'].includes(task.state));if(active)store.command(botId!,active.id,b.requestId as string,'cancel');}send(res,202,admitted);return;}
+        if(action==='reconcile'&&req.method==='POST'){const env=store.environment(botId!),q=store.quarantines().find(q=>q.botId===botId&&q.runId===b.runId);if(b.confirmed!==true||!env?.containerId||b.containerId!==env.containerId||!q?.reason.startsWith('Operator package reconciliation required:')||!policies.packageState(q.runId).length||policies.packageState(q.runId).some(item=>item.state!=='contained'))throw new AppError(409,'Confirm the reviewed run and exact current container identity');policies.reviewPackages(q.runId);store.noteQuarantine(q.runId,'Operator reviewed partial package changes; verify runner and environment stopped before release');send(res,202,{state:'awaiting_verified_stop'});return;}
+        throw new AppError(405,'Method not allowed');
+      }
+      const schedulesMatch=/^\/api\/bots\/([^/]+)\/schedules(?:\/([^/]+)(?:\/(pause|resume|history))?)?$/.exec(url.pathname);
+      if(schedulesMatch){const [,botId,id,action]=schedulesMatch;store.bot(botId!);
+        if(!id&&req.method==='GET'){send(res,200,{schedules:scheduler.list(botId!),status:scheduler.status(botId!)});return;}
+        if(!id&&req.method==='POST'){send(res,201,scheduler.create(botId!,await body(req) as ScheduleInput));return;}
+        if(id&&action==='history'&&req.method==='GET'){send(res,200,scheduler.history(botId!,id));return;}
+        if(id&&action==='pause'&&req.method==='POST'){await body(req);send(res,200,scheduler.pause(botId!,id));return;}
+        if(id&&action==='resume'&&req.method==='POST'){await body(req);send(res,200,scheduler.resume(botId!,id));return;}
+        if(id&&!action&&req.method==='DELETE'){await body(req);send(res,200,scheduler.delete(botId!,id));return;}
+        throw new AppError(405,'Method not allowed');
+      }
       const memoryMatch = /^\/api\/bots\/([^/]+)\/memory(?:\/([^/]+))?$/.exec(url.pathname);
       if (memoryMatch) {
         const [, botId, id] = memoryMatch; store.bot(botId!);

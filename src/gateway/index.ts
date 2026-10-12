@@ -1,5 +1,5 @@
 /**
- * Credential-holding, host-side Chat Completions gateway.
+ * Credential-holding, host-side text/function Chat Completions and Responses gateway.
  *
  * The sandbox receives only the Unix socket. Never pass this object's apiKey,
  * process.env, or a credential-bearing config file into the sandbox. The socket
@@ -139,14 +139,31 @@ function validateResponses(value:unknown,model:string):Record<string,unknown>{
   if(!record(value)||value.model!==model||value.stream!==true||value.store!==false||!Array.isArray(value.input))reject('Responses requires the fixed model, full input array, stream=true and store=false.');
   const fields=new Set(['model','input','instructions','tools','tool_choice','parallel_tool_calls','stream','store','reasoning','text','include','max_output_tokens','temperature','top_p','service_tier','prompt_cache_key','prompt_cache_retention','prompt_cache_options']);
   if(Object.keys(value).some(key=>!fields.has(key)))reject('Unsupported Responses field.');
-  const checkText=(content:unknown)=>{if(typeof content==='string')return;if(!Array.isArray(content)||content.some(part=>!record(part)||!['input_text','output_text','summary_text'].includes(String(part.type))||typeof part.text!=='string'||Object.keys(part).some(k=>!['type','text','annotations'].includes(k))))reject('Responses accepts only inline text.');};
+  // This is the pinned Pi text/function replay subset, not a general Responses proxy.
+  // In particular annotations, remote item references and hosted tool capabilities
+  // must not become an alternate path to provider-side retrieval.
+  const checkText=(content:unknown,types:readonly string[],allowString=true)=>{
+    if(allowString&&typeof content==='string')return;
+    if(!Array.isArray(content)||content.some(part=>!record(part)||!types.includes(String(part.type))||typeof part.text!=='string'
+      ||Object.keys(part).some(k=>!['type','text','annotations'].includes(k))
+      ||('annotations'in part&&(part.type!=='output_text'||!Array.isArray(part.annotations)||part.annotations.length!==0))))reject('Responses accepts only inline text.');
+  };
+  const checkReplayMetadata=(item:Record<string,unknown>)=>{
+    if(('id'in item&&(typeof item.id!=='string'||!item.id))
+      ||('status'in item&&!['completed','in_progress','incomplete'].includes(String(item.status))))reject('Invalid Responses replay metadata.');
+  };
   const input=value.input.map(item=>{
     if(!record(item))reject('Invalid Responses input.');
-    if(item.type==='function_call'){if(typeof item.call_id!=='string'||typeof item.name!=='string'||typeof item.arguments!=='string'||Object.keys(item).some(k=>!['type','id','call_id','name','arguments','status','namespace'].includes(k)))reject('Invalid function call.');return item;}
-    if(item.type==='function_call_output'){if(typeof item.call_id!=='string'||Object.keys(item).some(k=>!['type','call_id','output','id','status'].includes(k)))reject('Invalid function output.');checkText(item.output);return item;}
-    if(item.type==='reasoning'){if(typeof item.encrypted_content!=='string'||Object.keys(item).some(k=>!['type','id','encrypted_content','summary','status'].includes(k)))reject('Reasoning must be inline.');checkText(item.summary??[]);return item;}
-    if((item.type!==undefined&&item.type!=='message')||!['system','developer','user','assistant'].includes(String(item.role))||Object.keys(item).some(k=>!['type','role','content','id','status'].includes(k)))reject('Unsupported Responses input type.');
-    checkText(item.content);return {...item,role:item.role==='system'?'developer':item.role};
+    checkReplayMetadata(item);
+    if(item.type==='function_call'){if(typeof item.call_id!=='string'||!item.call_id||typeof item.name!=='string'||!item.name||typeof item.arguments!=='string'||('namespace'in item&&item.namespace!=='chestnut')||Object.keys(item).some(k=>!['type','id','call_id','name','arguments','status','namespace'].includes(k)))reject('Invalid function call.');return item;}
+    if(item.type==='function_call_output'){if(typeof item.call_id!=='string'||!item.call_id||Object.keys(item).some(k=>!['type','call_id','output','id','status'].includes(k)))reject('Invalid function output.');checkText(item.output,['input_text']);return item;}
+    if(item.type==='reasoning'){
+      if(typeof item.encrypted_content!=='string'||!item.encrypted_content||Object.keys(item).some(k=>!['type','id','encrypted_content','summary','content','status'].includes(k)))reject('Reasoning must contain inline encrypted state.');
+      checkText(item.summary??[],['summary_text'],false);if(item.content!==undefined)checkText(item.content,['reasoning_text'],false);return item;
+    }
+    if((item.type!==undefined&&item.type!=='message')||!['system','developer','user','assistant'].includes(String(item.role))||Object.keys(item).some(k=>!['type','role','content','id','status','phase'].includes(k)))reject('Unsupported Responses input type.');
+    if('phase'in item&&(item.role!=='assistant'||!['commentary','final_answer'].includes(String(item.phase))))reject('Invalid assistant message phase.');
+    checkText(item.content,item.role==='assistant'?['input_text','output_text']:['input_text']);return {...item,role:item.role==='system'?'developer':item.role};
   });
   if(value.instructions!==undefined&&typeof value.instructions!=='string')reject('Invalid instructions.');
   const validateTool=(tool:unknown)=>{if(!record(tool)||tool.type!=='function'||typeof tool.name!=='string'||Object.keys(tool).some(k=>!['type','name','description','parameters','strict'].includes(k))||!record(tool.parameters))reject('Only function tools are supported.');return tool;};
@@ -156,7 +173,9 @@ function validateResponses(value:unknown,model:string):Record<string,unknown>{
   if(value.reasoning!==undefined&&(!record(value.reasoning)||Object.keys(value.reasoning).some(k=>!['effort','summary'].includes(k))))reject('Invalid reasoning options.');
   if(value.text!==undefined&&(!record(value.text)||Object.keys(value.text).some(k=>!['format','verbosity'].includes(k))))reject('Invalid text options.');
   if(value.include!==undefined&&(!Array.isArray(value.include)||value.include.some(x=>x!=='reasoning.encrypted_content')))reject('Unsupported included data.');
-  const body:Record<string,unknown>={...value,input,...(tools?{tools}:{})};
+  // store:false replay needs the opaque reasoning state even when Pi has reasoning
+  // disabled or omits include. Never weaken validation to accept server-side IDs.
+  const body:Record<string,unknown>={...value,input,include:['reasoning.encrypted_content'],...(tools?{tools}:{})};
   // ChatGPT plan usage rejects these fields. Bounds are enforced by deadline and stream bytes instead.
   for(const field of ['max_output_tokens','temperature','top_p','prompt_cache_retention','prompt_cache_options','service_tier'])delete body[field];
   return body;

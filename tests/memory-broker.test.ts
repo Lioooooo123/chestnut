@@ -4,7 +4,7 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { MemoryRepository } from '../src/memory/repository.ts';
+import { MemoryRepository, type MemoryChange } from '../src/memory/repository.ts';
 import { createMemoryHandler, startMemoryBroker } from '../src/memory/broker.ts';
 import { request } from 'node:http';
 
@@ -22,6 +22,34 @@ test('agent tools read a fixed snapshot, stamp the run source and lose access af
     assert.ok(events.length > 0);
     allowed = false;
     assert.throws(() => handle({ action: 'read', input: { id: saved.id } }), /lease|cancel/i);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('the same run loses access to write receipts and mutations when its project binding is removed', () => {
+  const root = mkdtempSync(join(realpathSync(tmpdir()), 'chestnut-memory-scope-'));
+  try {
+    const repo = new MemoryRepository(join(root, 'memory')), botId = randomUUID(), otherBot = randomUUID();
+    const settings = (id: string, project: string | null) => repo.settings(id, { requestId: randomUUID(), expectedVersion: repo.snapshot(id).version, project, enabled: true });
+    settings(botId, 'fixture-project'); settings(otherBot, 'fixture-project');
+    const events: unknown[] = [];
+    const handle = createMemoryHandler({ repo, botId, taskId: randomUUID(), version: repo.snapshot(botId).version, authorize: () => true, onEvent: (_type, data) => events.push(data) });
+    const save = { action: 'save', input: { requestId: randomUUID(), title: 'Project tests', content: 'Use unit tests.', scope: 'project', kind: 'decision' } };
+    const saved = handle(save) as MemoryChange;
+    const update = { action: 'update', input: { requestId: randomUUID(), id: saved.id, expectedRevision: saved.entry!.revision, title: 'Project tests', content: 'Include behavior tests.' } };
+    const updated = handle(update) as MemoryChange;
+    assert.equal((handle(save) as MemoryChange).replayed, true);
+    assert.equal((handle(update) as MemoryChange).replayed, true);
+    settings(botId, null);
+    const later = repo.update(otherBot, saved.id, { requestId: randomUUID(), expectedRevision: updated.entry!.revision, title: 'Revised project tests', content: 'Use synthetic repository fixtures.' });
+    const count = events.length;
+    assert.throws(() => handle(save), /not found in this scope/);
+    assert.throws(() => handle(update), /not found in this scope/);
+    assert.throws(() => handle({ action: 'update', input: { ...update.input, requestId: randomUUID(), expectedRevision: later.entry!.revision } }), /not found in this scope/);
+    assert.throws(() => handle({ action: 'forget', input: { requestId: randomUUID(), id: saved.id, expectedRevision: later.entry!.revision } }), /not found in this scope/);
+    assert.throws(() => handle({ action: 'read', input: { id: saved.id } }), /not found/);
+    assert.equal(events.length, count);
+    assert.equal(repo.snapshot(otherBot).version, later.version);
+    assert.deepEqual(repo.snapshot(otherBot).entries, [later.entry]);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

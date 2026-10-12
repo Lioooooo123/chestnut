@@ -92,7 +92,7 @@ export class MemoryMaintenance {
         const admitted = this.store.tx(() => {
           if (this.store.get('SELECT botId FROM memory_jobs WHERE token IS NOT NULL AND leaseUntil>? LIMIT 1',now)) return false;
           this.store.db.prepare('INSERT OR IGNORE INTO memory_jobs(botId) VALUES (?)').run(bot.id);
-          this.store.db.prepare("UPDATE memory_jobs SET token=?,leaseUntil=?,state='running',updatedAt=?,error=NULL,provider=? WHERE botId=?").run(token,now+90000,now,this.c.mode === 'demo' ? 'explicit-demo' : 'openai',bot.id); return true;
+          this.store.db.prepare("UPDATE memory_jobs SET token=?,leaseUntil=?,state='running',updatedAt=?,error=NULL,provider='pending' WHERE botId=?").run(token,now+90000,now,bot.id); return true;
         });
         if (!admitted) return;
         const admittedRequest = oldJob?.requested ?? null;
@@ -100,27 +100,41 @@ export class MemoryMaintenance {
         try {
           const candidateTasks = [...fresh,...(dream ? this.completed(bot.id,progress.cursor,true) : [])].filter(t => t.createdAt > progress.suppressedBefore);
           let remaining = 16000;
+          // Every source consumes the same allowance immediately. Oversized tasks are
+          // truncated in place so they cannot permanently block the incremental cursor.
+          const takeSource = (text: string, limit: number) => {
+            const bounded = safe(text).slice(0,Math.min(limit,remaining));
+            remaining -= bounded.length; return bounded;
+          };
           const tasks: MaintenanceTask[] = [];
           for (const task of candidateTasks) {
             if (remaining < 1000) break;
             const steering = this.store.all<{text:string}>('SELECT text FROM commands WHERE taskId=? AND type=\'steer\' AND state=\'sent_unconfirmed\' ORDER BY createdAt LIMIT 10',task.id);
-            const user = [task.prompt,...steering.map(c => c.text)].map(text => safe(text).slice(0,Math.min(3200,remaining))).filter(Boolean);
-            const result = safe(task.result ?? '').slice(0,Math.min(4000,Math.max(0,remaining-user.join('').length)));
-            const size = user.join('').length+result.length; if (size > remaining) break;
-            tasks.push({ id: task.id, createdAt: task.createdAt, user, result }); remaining -= size;
+            const user = [task.prompt,...steering.map(c => c.text)].map(text => takeSource(text,3200)).filter(Boolean);
+            const result = takeSource(task.result ?? '',4000);
+            tasks.push({ id: task.id, createdAt: task.createdAt, user, result });
           }
           const entries = snapshot.entries.slice(0,30).map(e => ({ ...e, content: safe(e.content).slice(0,200) }));
           const input: MaintenanceInput = { mode: dream ? 'dream' : 'extract', tasks, entries, signal: this.controller.signal };
-          const chars = JSON.stringify({ tasks, entries }).length;
-          const budget = this.store.tx(() => {
-            const day = new Date(now).toISOString().slice(0,10);
-            this.store.db.prepare('INSERT OR IGNORE INTO memory_budget VALUES (?,0,0)').run(day);
-            const row = this.store.get<{calls:number;characters:number}>('SELECT calls,characters FROM memory_budget WHERE day=?',day)!;
-            if (row.calls >= (this.c.memoryDailyCalls ?? 24) || row.characters+chars > 160000) return false;
-            this.store.db.prepare('UPDATE memory_budget SET calls=calls+1,characters=characters+? WHERE day=?').run(chars,day); return true;
-          });
-          if (!budget) throw new AppError(429,'Daily memory maintenance budget reached');
-          const plan = tasks.length || (dream && entries.length) ? await this.provider(input) : { additions: [], removals: [], conflicts: [] };
+          const providerCalled = tasks.length > 0 || (dream && entries.length > 0);
+          let plan: MaintenancePlan = { additions: [], removals: [], conflicts: [] };
+          if (providerCalled) {
+            const chars = JSON.stringify({ tasks, entries }).length;
+            const budget = this.store.tx(() => {
+              const day = new Date(now).toISOString().slice(0,10);
+              this.store.db.prepare('INSERT OR IGNORE INTO memory_budget VALUES (?,0,0)').run(day);
+              const row = this.store.get<{calls:number;characters:number}>('SELECT calls,characters FROM memory_budget WHERE day=?',day)!;
+              if (row.calls >= (this.c.memoryDailyCalls ?? 24) || row.characters+chars > 160000) return false;
+              this.store.db.prepare('UPDATE memory_budget SET calls=calls+1,characters=characters+? WHERE day=?').run(chars,day);
+              this.store.db.prepare('UPDATE memory_jobs SET provider=? WHERE botId=? AND token=?').run(this.c.mode === 'demo' ? 'explicit-demo' : 'openai',bot.id,token);
+              return true;
+            });
+            if (!budget) throw new AppError(429,'Daily memory maintenance budget reached');
+            // Reserve attempted calls before inference, including failed attempts.
+            plan = await this.provider(input);
+          } else {
+            this.store.db.prepare("UPDATE memory_jobs SET provider='skipped-no-source' WHERE botId=? AND token=?").run(bot.id,token);
+          }
           this.validate(plan,input);
           // Only tasks actually provided (or intentionally suppressed) may advance the processed cursor.
           const covered = [];
@@ -132,7 +146,7 @@ export class MemoryMaintenance {
               if (this.controller!.signal.aborted || !this.store.get('SELECT botId FROM memory_jobs WHERE botId=? AND token=? AND leaseUntil>?',bot.id,token,Date.now())) throw new AppError(409,'Maintenance lease revoked');
             });
           this.store.db.prepare("UPDATE memory_jobs SET state='succeeded',token=NULL,leaseUntil=0,retryAt=0,error=NULL,added=?,removed=?,updatedAt=?,lastRequest=COALESCE(?,lastRequest),requested=CASE WHEN requested=? THEN NULL ELSE requested END WHERE botId=? AND token=?").run(committed.added,committed.removed,Date.now(),admittedRequest,admittedRequest,bot.id,token);
-          if (fresh[0]) this.store.event(bot.id,fresh[0].id,'memory.maintained',{version:committed.version,added:committed.added,removed:committed.removed,cursor,dream});
+          if (fresh[0]) this.store.event(bot.id,fresh[0].id,'memory.maintained',{version:committed.version,added:committed.added,removed:committed.removed,cursor,dream,providerCalled});
         } catch (error) {
           const message = error instanceof AppError ? error.message : 'Memory inference failed; no memory was committed. Retry after checking the provider.';
           this.store.db.prepare("UPDATE memory_jobs SET state='failed',token=NULL,leaseUntil=0,retryAt=?,error=?,updatedAt=? WHERE botId=? AND token=?").run(Date.now()+60000,message,Date.now(),bot.id,token);

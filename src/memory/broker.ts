@@ -38,6 +38,7 @@ export function createMemoryHandler(options: MemoryBrokerOptions) {
     if (action === 'save') changed = options.repo.save(options.botId, { ...input, sourceTaskId: options.taskId } as unknown as SaveMemory, 'agent', admit);
     else if (action === 'update') { requireId(input.id); changed = options.repo.update(options.botId, input.id, { ...input, sourceTaskId: options.taskId } as unknown as UpdateMemory, 'agent', admit); }
     else { requireId(input.id); changed = options.repo.forget(options.botId, input.id, { requestId: input.requestId as string, expectedRevision: input.expectedRevision as string }, admit); }
+    admit();
     options.onEvent('memory.updated', { action, version: changed.version, id: changed.id, title: changed.entry?.title, replayed: changed.replayed });
     return changed;
   };

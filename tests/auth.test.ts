@@ -42,3 +42,45 @@ test('account model list filters visibility, preserves ordering and selection ca
  const auth=new AuthManager(root,flow,async(url,options)=>{assert.equal(url,'https://api.openai.com/v1/models');assert.equal(new Headers(options!.headers).get('authorization'),'Bearer test-access-token');return Response.json({models:[{slug:'gpt-6.1-sol',display_name:'Model A',visibility:'list'},{slug:'hidden',display_name:'Hidden',visibility:'hidden'},{slug:'gpt-6-sol',display_name:'Model B',visibility:'list'}]});});
  try{await auth.startLogin(randomUUID());await auth.wait();assert.deepEqual((await auth.models()).map(m=>m.id),['gpt-6.1-sol','gpt-6-sol']);await assert.rejects(auth.selectModel('not-available'),/available/);await auth.selectModel('gpt-6-sol');assert.equal(auth.status().model,'gpt-6-sol');}finally{auth.close();rmSync(root,{recursive:true,force:true});}
 });
+
+test('captured grants refresh within one identity and revoke across logout, relogin and model changes',async()=>{
+  let account=1,refreshes=0;
+  const flow:OAuthFlow={async login(){return {...credential(),access:`account-${account}`,expires:Date.now()-1};},async refresh(value){refreshes++;return {...value,access:`${value.access}-renewed`,expires:Date.now()+3600000};}};
+  const root=mkdtempSync(join(realpathSync(tmpdir()),'cn-auth-grant-'));
+  const transport:typeof fetch=async()=>Response.json({models:[{slug:'model-a',visibility:'list'},{slug:'model-b',visibility:'list'}]});
+  const auth=new AuthManager(root,flow,transport),other=new AuthManager(root,flow,transport);
+  try{
+    await auth.startLogin(randomUUID());await auth.wait();
+    const grant=auth.grant();assert.equal(grant.model,null);assert.equal(await grant.apiKey(),'account-1-renewed');assert.equal(grant.isCurrent(),true);assert.equal(refreshes,1);
+    assert.ok(!JSON.stringify(grant).includes('account-1'));
+    await other.selectModel('model-a');assert.equal(grant.isCurrent(),false);await assert.rejects(grant.apiKey(),/changed/);
+    const selected=auth.grant();assert.equal(selected.model,'model-a');
+    await other.selectModel('model-a');assert.equal(selected.isCurrent(),true,'idempotent selection does not revoke a grant');
+    await other.selectModel('model-b');await other.selectModel('model-a');assert.equal(selected.isCurrent(),false,'switching away and back cannot resurrect a grant');
+    const beforeLogin=auth.grant();account=2;await other.startLogin(randomUUID());await other.wait();
+    await assert.rejects(beforeLogin.apiKey(),/changed/);assert.equal(await auth.apiKey(),'account-2-renewed');
+    const beforeLogout=auth.grant();await other.logout();assert.equal(beforeLogout.isCurrent(),false);await assert.rejects(beforeLogout.apiKey(),/changed/);
+  }finally{auth.close();other.close();rmSync(root,{recursive:true,force:true});}
+});
+
+test('credential lookup queued behind a lock never adopts a replacement OAuth generation',async()=>{
+  const {DatabaseSync}=await import('node:sqlite');let account=1;
+  const flow:OAuthFlow={async login(){return {...credential(),access:`account-${account}`,expires:Date.now()-1};},async refresh(value){return {...value,expires:Date.now()+3600000};}};
+  const f=fixture(flow),other=new AuthManager(f.root,flow);
+  try{
+    await f.auth.startLogin(randomUUID());await f.auth.wait();
+    const lock=new DatabaseSync(join(f.root,'auth.lock.sqlite'));lock.exec('BEGIN IMMEDIATE');
+    const pending=f.auth.apiKey();const rejected=assert.rejects(pending,/changed/);
+    lock.exec('COMMIT');lock.close();
+    account=2;await other.startLogin(randomUUID());await other.wait();
+    await rejected;assert.equal(await other.apiKey(),'account-2');
+  }finally{f.auth.close();other.close();f.close();}
+});
+
+test('cancelled refresh cannot publish a replacement credential',async()=>{
+  const controller=new AbortController();
+  const flow:OAuthFlow={async login(){return {...credential(),expires:Date.now()-1};},async refresh(value){controller.abort();return {...value,access:'must-not-publish',expires:Date.now()+3600000};}};
+  const f=fixture(flow);
+  try{await f.auth.startLogin(randomUUID());await f.auth.wait();await assert.rejects(f.auth.grant().apiKey(controller.signal));assert.ok(!readFileSync(join(f.root,'auth.json'),'utf8').includes('must-not-publish'));}
+  finally{f.auth.close();f.close();}
+});

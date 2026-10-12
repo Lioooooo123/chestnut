@@ -1,5 +1,26 @@
 # Verification report
 
+## Latest macOS Memoh-inspired milestone acceptance (2026-10-12 UTC)
+
+Baseline `4abf16f4c6a75eb03f248e4d427b08b455fb9ec4` was fetched into an isolated worktree; the earlier local checkout and user commits were preserved. The Library patch's original SHA-256 was verified, then the two supplied version-1 corrections were applied without overlapping the full patch.
+
+On Node v26.5.0 / npm 11.17.0, the default guarded `npm run check` passed: **301 tests, 291 passed, 0 failed, 10 explicitly skipped Linux util-linux flock tests**. All Unix-listener cases ran on this Mac, including private gateway sockets, memory broker, Pi memory extension and the synthetic ChatGPT Worker integration. These use local fixtures, not real provider credentials or Docker. The one Mac fixture correction places that Worker's real broker in a short canonical temporary directory; production socket/path limits remain unchanged.
+
+Locked root/Pi installation, all 2,029 Pi source hashes and retained license, 14 local package links, immutable catalog hydration, complete Pi offline build, 22 selected source contracts (34 unrelated agent-loop tests filtered out), guarded compiled RPC smoke, strict TypeScript and independent model-less Worker demo passed. Source and lockfiles in `vendor/pi` were unchanged.
+
+Safari desktop rendering and navigation were inspected for sample Bot creation, Environment facts/default deny policy/not-live-verified wording, disabled Telegram readiness and Schedules. A separate loopback API smoke verified identical-create idempotency, a real once fire/ledger/task reaching `succeeded`, and an `Asia/Shanghai` cron sample being durably paused. Safari showed the resulting finished schedules/completed tasks and paused cron zone. This did not verify every management interaction, mobile layout or cross-browser accessibility.
+
+The default external-network guard and secret-style environment filtering stayed enabled. The UI demo additionally disabled automatic memory maintenance and Telegram. No live model, OAuth account, Telegram message, package download/install, rootless Docker, Linux OS lock, VPS access or deployment was used. The user's existing `.github/workflows` were preserved unchanged; publication uses `[skip ci]` and independently checks remote refs/tree and Actions status.
+
+## Earlier cloud Memoh-inspired verification (2026-10-12 UTC)
+
+The new changes are described in [memoh-milestone-report.md](memoh-milestone-report.md), with the required live gate in [service-acceptance.md](service-acceptance.md). This section supersedes old aggregate counts and feature-status statements below; older sections are retained as historical evidence only.
+
+Latest default check: 301 reported tests, 296 pass, 4 Unix-listener EPERM failures, 1 explicit listener skip. It is not a full pass. Explicitly socket-free selection: 298 pass, 0 fail, 1 skip, with four named listener cases excluded (Node counts two empty files). Typecheck, actual complete pinned Pi offline build, 2,029 source hashes, 14 local links, 22 selected Pi contracts, compiled RPC startup/get_state/shutdown and independent Worker model-less demo pass. Real Docker, service continuity, Debian download/install, live model/Telegram and browser visual stages remain not run.
+
+The default test runner now blocks external Node network calls and removes ambient secret-style variables. An old mocked persistent-Worker fixture's unintended real-maintenance-fetch path was corrected before the final safe test run. The gateway remains a thin credential/lifetime boundary; no real provider credentials, intentional live-model acceptance, or deployment were used. The initial fixture had an unintended external-request path; the corrected suite blocks it.
+
+
 Date: 2026-10-12. The cloud build below used Node v24.19.0. The macOS closeout used Node v26.5.0 and npm 11.17.0; its results and changes are recorded separately.
 
 ## macOS closeout

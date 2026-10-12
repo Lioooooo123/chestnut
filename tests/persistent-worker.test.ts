@@ -10,7 +10,7 @@ import { config,prepareStorage } from '../src/config.ts';
 import { Worker,type AdapterFactory,type WorkerDependencies } from '../src/worker.ts';
 async function until(fn:()=>boolean){const end=Date.now()+5000;while(!fn()){if(Date.now()>end)throw new Error('Timed out');await sleep(20);}}
 async function fixture(factory:AdapterFactory,deps:WorkerDependencies={}){
-  const root=await mkdtemp(join(tmpdir(),'cn-persist-worker-'));const c=config({CHESTNUT_MODE:'pi',CHESTNUT_SANDBOX_PROFILE:'persistent',CHESTNUT_EXPERIMENTAL_PERSISTENT:'1',CHESTNUT_DATA_DIR:root,OPENAI_API_KEY:'test-only-not-a-credential'});
+  const root=await mkdtemp(join(tmpdir(),'cn-persist-worker-'));const c=config({CHESTNUT_MODE:'pi',CHESTNUT_MEMORY_AUTOMATIC:'0',CHESTNUT_SANDBOX_PROFILE:'persistent',CHESTNUT_EXPERIMENTAL_PERSISTENT:'1',CHESTNUT_DATA_DIR:root,OPENAI_API_KEY:'test-only-not-a-credential'});
   // This fixture stubs every gateway/Docker operation; use a canonical local directory
   // so macOS can exercise Worker state transitions without claiming Linux transport coverage.
   c.gatewayRoot=join(root,'mock-gateways');prepareStorage(c);const s=new Store(c.dbPath),b=s.createBot('Persistent test');

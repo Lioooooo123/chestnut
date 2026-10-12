@@ -11,6 +11,8 @@ interface PendingCommand {
 export class PiRpcAdapter implements WorkerAdapter {
   private readonly backend: SandboxBackend;
   private readonly ackTimeoutMs: number;
+  private readonly requireEnvironmentReady:boolean;
+  private environmentReady=false;
   private readonly beforePrompt?: () => void;
   private readonly beforeSteer?: () => void;
   private transport?: RpcTransport;
@@ -23,8 +25,8 @@ export class PiRpcAdapter implements WorkerAdapter {
   private started = false;
   private closed = false;
   private cancelPromise?: Promise<void>;
-  constructor(backend: SandboxBackend, options: { ackTimeoutMs?: number; beforePrompt?: () => void; beforeSteer?: () => void } = {}) {
-    this.backend = backend; this.ackTimeoutMs = options.ackTimeoutMs ?? 30_000;
+  constructor(backend: SandboxBackend, options: { requireEnvironmentReady?:boolean; ackTimeoutMs?: number; beforePrompt?: () => void; beforeSteer?: () => void } = {}) {
+    this.requireEnvironmentReady=options.requireEnvironmentReady??false; this.backend = backend; this.ackTimeoutMs = options.ackTimeoutMs ?? 30_000;
     this.beforePrompt = options.beforePrompt; this.beforeSteer = options.beforeSteer;
   }
   async start(input: WorkerInput, onEvent: WorkerEventHandler): Promise<void> {
@@ -40,6 +42,7 @@ export class PiRpcAdapter implements WorkerAdapter {
       if (this.cancelled) { await this.transport.stop(); throw new Error('Run cancelled before prompt'); }
       await this.command(randomUUID(), 'get_state');
       if (this.cancelled || this.closed) throw new Error('Run cancelled before prompt');
+      if(this.requireEnvironmentReady&&!this.environmentReady)throw new Error('Persistent environment tools did not become ready');
       this.beforePrompt?.();
       await this.command(input.runId, 'prompt', { message: input.prompt });
       await completion;
@@ -116,6 +119,7 @@ export class PiRpcAdapter implements WorkerAdapter {
       value = parsed as Record<string, unknown>;
     } catch { this.fail(new Error('Malformed Pi JSONL protocol')); void this.transport?.stop().catch(() => {}); return; }
     const type = value.type as string;
+    if(type==='environment_ready'&&Array.isArray(value.tools)&&['environment_bash','environment_read','environment_write','environment_edit'].every(name=>(value.tools as unknown[]).includes(name)))this.environmentReady=true;
     try { this.onEvent({ type, data: value }); }
     catch (error) {
       this.fail(error instanceof Error ? error : new Error(String(error)));

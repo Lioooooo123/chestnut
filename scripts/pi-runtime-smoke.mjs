@@ -8,7 +8,7 @@ const root=fileURLToPath(new URL('../',import.meta.url));
 const directory=await mkdtemp(join(tmpdir(),'chestnut-pi-smoke-'));
 try {
   await new Promise((resolve,reject)=>{
-    const child=spawn(process.execPath,[join(root,'vendor/pi/packages/coding-agent/dist/bundle/rpc-entry.js'),
+    const child=spawn(process.execPath,['--import',join(root,'scripts/test-no-network.mjs'),join(root,'vendor/pi/packages/coding-agent/dist/bundle/rpc-entry.js'),
       '--no-tools','--no-extensions','--no-mcp','--no-skills','--no-context-files','--no-prompt-templates','--no-themes','--no-approve','--no-session'],{
       cwd:directory,env:{PATH:process.env.PATH,HOME:directory,PI_CODING_AGENT_DIR:join(directory,'agent'),PI_OFFLINE:'1',PI_NO_UPDATE_CHECK:'1'},stdio:['pipe','pipe','pipe'],shell:false});
     let output='',errors='',received=false;

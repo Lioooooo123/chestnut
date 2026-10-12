@@ -45,7 +45,12 @@ export class Store {
     this.event(botId,task.id,'task.queued',{parentTaskId}); return task;
   }
   submit(botId: string, messageId: string, prompt: string): Task {
-    requireText(prompt); return this.tx(() => this.idempotent(botId,messageId,{kind:'task',prompt},() => this.insertTask(botId,prompt)));
+    requireText(prompt); return this.tx(() => this.submitInTransaction(botId,messageId,prompt));
+  }
+  /** Trusted control-plane callers can atomically enqueue with their own durable ledger. */
+  submitInTransaction(botId: string, messageId: string, prompt: string): Task {
+    if (!this.db.isTransaction) throw new Error('submitInTransaction requires an active transaction');
+    requireText(prompt); return this.idempotent(botId,messageId,{kind:'task',prompt},() => this.insertTask(botId,prompt));
   }
   command(botId: string, taskId: string, messageId: string, type: string, text?: string): Task | Command {
     if (!['steer','follow_up','cancel'].includes(type)) throw new AppError(400,'Invalid command type');
@@ -90,10 +95,10 @@ export class Store {
     }
     return expired.length;
   }
-  ensureEnvironment(botId:string,profile:'ephemeral'|'persistent') {
+  ensureEnvironment(botId:string,profile:'ephemeral'|'persistent'|'service') {
     this.bot(botId);const existing=this.get<{profile:string}>('SELECT * FROM bot_environments WHERE botId=?',botId);
     if(existing&&existing.profile!==profile)throw new AppError(409,'Bot environment profile cannot change implicitly');
-    this.db.prepare("INSERT OR IGNORE INTO bot_environments VALUES (?,?,?,'unprovisioned','none',?,NULL,NULL)").run(botId,profile,profile==='persistent'?`chestnut-bot-${botId}`:'per-run',Date.now());
+    this.db.prepare("INSERT OR IGNORE INTO bot_environments VALUES (?,?,?,'unprovisioned','none',?,NULL,NULL)").run(botId,profile,profile==='persistent'?`chestnut-bot-${botId}`:profile==='service'?`chestnut-env-${botId}`:'per-run',Date.now());
   }
   environment(botId:string) { this.bot(botId);return this.get<{botId:string;profile:string;containerName:string;state:string;networkPolicy:string;containerId:string|null;imageId:string|null}>('SELECT * FROM bot_environments WHERE botId=?',botId) ?? null; }
   observeEnvironment(botId:string,observed:{containerId:string;imageId:string;state:'running'|'stopped'}) {

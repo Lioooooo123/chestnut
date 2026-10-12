@@ -25,7 +25,7 @@ await new Promise((resolve,reject)=>{relay.once('error',reject);relay.listen(401
 const agentDir=`/tmp/chestnut-agent-${run}`;
 const sessionDir=`/var/lib/chestnut/sessions/${task}`;
 await mkdir(agentDir,{recursive:true,mode:0o700});await mkdir(sessionDir,{recursive:true,mode:0o700});await mkdir('/root',{recursive:true,mode:0o700});
-await writeFile(`${agentDir}/models.json`,JSON.stringify({providers:{chestnut:{baseUrl:'http://127.0.0.1:4011/v1',api:protocol==='responses'?'openai-responses':'openai-completions',apiKey:'chestnut-local-no-secret',models:[{id:model,name:model,reasoning:false,input:['text'],contextWindow:128000,maxTokens:8192,cost:{input:0,output:0,cacheRead:0,cacheWrite:0},compat:{supportsDeveloperRole:false,supportsStore:false}}]}}}),{mode:0o600});
+await writeFile(`${agentDir}/models.json`,JSON.stringify({providers:{chestnut:{baseUrl:'http://127.0.0.1:4011/v1',api:protocol==='responses'?'openai-responses':'openai-completions',apiKey:'chestnut-local-no-secret',models:[{id:model,name:model,reasoning:protocol==='responses',input:['text'],contextWindow:128000,maxTokens:8192,cost:{input:0,output:0,cacheRead:0,cacheWrite:0},compat:{supportsDeveloperRole:false,supportsStore:false}}]}}}),{mode:0o600});
 const memorySocket = `/run/chestnut/${run}.memory.sock`;
 const memoryArgs = existsSync(memorySocket) ? ['--extension', '/opt/chestnut/memory-extension.mjs'] : [];
 const child=spawn('node',['/opt/pi/packages/coding-agent/dist/bundle/rpc-entry.js','--provider','chestnut','--model',model,

@@ -70,3 +70,35 @@ test('ChatGPT API starts the outer flow, exposes safe status and logout clears t
   assert.equal((await request(api,'DELETE','/api/auth',{})).status,200);assert.equal(JSON.parse((await request(api,'GET','/api/auth')).body).connected,false);
  }finally{api.close();s.close();rmSync(root,{recursive:true,force:true});}
 });
+
+test('runtime APIs manage durable schedules and revision-checked operator policy without exposing channel secrets',async()=>{
+  const s=new Store(':memory:'),api=createApi(s,config());try{
+    const bot=s.createBot('Managed'),other=s.createBot('Other'),base=`/api/bots/${bot.id}`;
+    const status=JSON.parse((await request(api,'GET','/api/status')).body);assert.equal(status.capabilities.liveVerified,false);assert.ok(status.channels.telegram);assert.ok(!('token' in status.channels.telegram));
+    const initial=JSON.parse((await request(api,'GET',`${base}/environment`)).body);assert.equal(initial.policy.revision,'none');assert.deepEqual(initial.policy.allowedPackages,[]);
+    const policy={expectedRevision:'none',allowedPackages:['jq'],allowedHosts:['example.org']};const saved=await request(api,'PUT',`${base}/environment/policy`,policy);assert.equal(saved.status,200);
+    assert.equal((await request(api,'PUT',`${base}/environment/policy`,policy)).status,409);
+    assert.equal((await request(api,'PUT',`${base}/environment/policy`,{expectedRevision:JSON.parse(saved.body).revision,allowedPackages:[],allowedHosts:['*.example.org']})).status,400);
+    const input={requestId:randomUUID(),name:'Review',prompt:'Summarize local progress',kind:'once',runAt:Date.now()+60000,timeZone:'UTC'};
+    const created=await request(api,'POST',`${base}/schedules`,input);assert.equal(created.status,201);const schedule=JSON.parse(created.body);
+    assert.equal(JSON.parse((await request(api,'POST',`${base}/schedules`,input)).body).id,schedule.id);
+    assert.equal((await request(api,'POST',`${base}/schedules/${schedule.id}/pause`,{})).status,200);
+    assert.equal((await request(api,'POST',`${base}/schedules/${schedule.id}/resume`,{})).status,200);
+    assert.equal((await request(api,'GET',`${base}/schedules/${schedule.id}/history`)).status,200);
+    assert.equal((await request(api,'POST',`/api/bots/${other.id}/schedules/${schedule.id}/pause`,{})).status,404);
+    assert.equal((await request(api,'DELETE',`${base}/schedules/${schedule.id}`,{})).status,200);
+    assert.equal((await request(api,'POST',`${base}/environment/stop`,{requestId:randomUUID()})).status,409);
+  }finally{api.close();s.close();}
+});
+
+test('replaying a completed environment-stop request never cancels a newer task',async()=>{
+  const {EnvironmentPolicies}=await import('../src/environments/policy.ts');
+  const s=new Store(':memory:'),api=createApi(s,config({CHESTNUT_MODE:'pi',CHESTNUT_SANDBOX_PROFILE:'service',CHESTNUT_EXPERIMENTAL_SERVICE:'1'}));
+  try{const bot=s.createBot('Service'),policies=new EnvironmentPolicies(s),path=`/api/bots/${bot.id}/environment/stop`,requestId=randomUUID();
+    const first=s.submit(bot.id,randomUUID(),'First'),run=s.claim('fixture')!;
+    assert.equal((await request(api,'POST',path,{requestId})).status,202);assert.equal(s.task(bot.id,first.id).state,'cancelling');
+    s.finish(run,'cancelled',null,null);policies.finishStop(bot.id,requestId);
+    const second=s.submit(bot.id,randomUUID(),'Second');s.claim('fixture');
+    const replay=await request(api,'POST',path,{requestId});assert.equal(replay.status,202);assert.equal(JSON.parse(replay.body).replayed,true);assert.equal(s.task(bot.id,second.id).state,'running');
+  }finally{api.close();s.close();}
+});

@@ -12,11 +12,19 @@ const state = {
   auth:null,authBusy:false,authModels:[],authRevision:0,authModelsAt:0,
 view: 'tasks', memory: null, maintenance: null, maintenanceError: null, maintenanceBusy: false, memoryProposalSource: null, memoryId: null, memoryRevision: null, memorySettingsVersion: null, memorySettingsDirty: false, memoryBusy: false, memoryDrafts: new Map(),
 };
+const management = {
+  environment: null, environmentLoading: false, environmentBusy: false, environmentError: '', environmentMutationError: '',
+  policyDirty: false, policyRevision: null, policyDrafts: new Map(),
+  schedules: null, scheduleStatus: null, schedulesLoading: false, scheduleBusy: false, schedulesError: '',
+  scheduleDrafts: new Map(), deleteId: null, historyId: null, history: null, historyError: '',
+  loads: new Map(),
+};
 let toastTimer;
 let pollTimer;
 let taskListSignature = '';
 let botListSignature = '';
 let eventSignature = '';
+let scheduleSignature = '';
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -44,6 +52,10 @@ function submission(key, payload) {
 async function api(path, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
+  const externalSignal = options.signal;
+  const cancel = () => controller.abort();
+  externalSignal?.addEventListener('abort', cancel, { once: true });
+  if (externalSignal?.aborted) controller.abort();
   try {
     const response = await fetch(path, {
       ...options, signal: controller.signal, cache: 'no-store',
@@ -58,10 +70,11 @@ async function api(path, options = {}) {
     }
     return payload;
   } catch (error) {
+    if (error.name === 'AbortError' && externalSignal?.aborted) throw error;
     if (error.name === 'AbortError') throw new Error('The server took too long to respond. The request may have reached the server.');
     if (error instanceof TypeError) throw new Error('Cannot reach the server. Check that Chestnut is running, then try again.');
     throw error;
-  } finally { clearTimeout(timeout); }
+  } finally { clearTimeout(timeout); externalSignal?.removeEventListener('abort', cancel); }
 }
 const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body) });
 const botPath = (id = state.botId) => `/api/bots/${encodeURIComponent(id)}/tasks`;
@@ -109,10 +122,11 @@ function renderStatus() {
     $('composer-hint').textContent = 'Demo tasks are simulated, without AI or shell access.';
   } else if (state.status?.mode === 'pi') {
     $('mode-banner').className = 'mode-banner live';
-    const description = state.status?.sandboxProfile === 'persistent' ? 'Experimental persistent root · OS files persist. The entire bot stops after each task; services do not stay running. No outbound Internet.' : 'Pi mode · Read-only OS, persistent workspace. Tasks run through your configured Pi worker.';
+    const description = state.status?.sandboxProfile === 'service' ? 'Experimental service environment · Background services may persist between tasks. Direct runtime networking is disabled; governed fetch and operator-approved package helpers are separate. Not live-verified.' : state.status?.sandboxProfile === 'persistent' ? 'Experimental persistent root · OS files persist. The entire bot stops after each task; services do not stay running. No outbound Internet.' : 'Pi mode · Read-only OS, persistent workspace. Tasks run through your configured Pi worker.';
     if ($('mode-description').textContent !== description) $('mode-description').textContent = description;
     $('composer-hint').textContent = 'One task at a time in this workspace.';
   }
+  renderTelegram();
 }
 function renderBots() {
   const signature = JSON.stringify([state.bots, state.botId]);
@@ -253,9 +267,11 @@ function renderControls() {
 function selectBot(id) {
   if (state.botId) rememberMemoryDraft();
   if (id === state.botId) return;
+  rememberManagementDrafts();
   if (state.botId) state.drafts.set(state.botId, $('task-prompt').value);
   if (state.taskId) state.commandDrafts.set(state.taskId, $('command-text').value);
   state.botId = id; state.taskId = null; state.tasks = []; state.tasksLoaded = false; state.botRevision++;
+  resetManagement();
   state.memory = null; state.maintenance = null; state.maintenanceError = null; state.memoryId = null; state.memoryRevision = null; state.memorySettingsVersion = null; state.memorySettingsDirty = false;
   resetMemoryForm(state.memoryDrafts.get(id)); renderMemory(); renderTaskMemory();
   $('task-prompt').value = state.drafts.get(id) || ''; $('command-text').value = '';
@@ -298,6 +314,7 @@ async function refresh() {
       try { remembered = localStorage.getItem('chestnut.selectedBot'); } catch { /* storage is optional */ }
       state.botId = bots.find((bot) => bot.id === remembered)?.id || bots[0]?.id || null;
       state.tasks = []; state.taskId = null; state.botRevision++; state.tasksLoaded = false;
+      resetManagement();
       $('task-prompt').value = state.drafts.get(state.botId) || '';
     }
     renderStatus(); renderBots();
@@ -316,6 +333,8 @@ async function refresh() {
         renderTaskMemory();
       }
       if (state.view === 'memory') await loadMemory(botId, revision);
+      if (state.view === 'environment' && botId === state.botId && revision === state.botRevision) await loadEnvironment(botId, revision);
+      if (state.view === 'schedules' && botId === state.botId && revision === state.botRevision) { await loadSchedules(botId, revision); if (management.historyId) await loadScheduleHistory(management.historyId, botId, revision); }
     }
     renderControls();
   } catch (error) {
@@ -419,9 +438,15 @@ window.addEventListener('online', refresh);
 
 const memoryPath = (botId = state.botId) => `/api/bots/${encodeURIComponent(botId)}/memory`;
 function setView(view) {
-  state.view = view; $('tasks-view').hidden = view !== 'tasks'; $('memory-view').hidden = view !== 'memory';
-  for (const name of ['tasks', 'memory']) { $(`${name}-tab`).classList.toggle('active', view === name); $(`${name}-tab`).setAttribute('aria-pressed', String(view === name)); }
+  if (view !== state.view) { cancelManagementLoads(); management.deleteId = null; $('environment-stop-confirmation').hidden = true; }
+  state.view = view;
+  for (const name of ['tasks', 'memory', 'environment', 'schedules']) {
+    $(`${name}-view`).hidden = view !== name;
+    $(`${name}-tab`).classList.toggle('active', view === name); $(`${name}-tab`).setAttribute('aria-pressed', String(view === name));
+  }
   if (view === 'memory' && state.botId) loadMemory(state.botId, state.botRevision);
+  if (view === 'environment' && state.botId) { renderEnvironment(); loadEnvironment(state.botId, state.botRevision); }
+  if (view === 'schedules' && state.botId) { renderSchedules(); loadSchedules(state.botId, state.botRevision); }
 }
 function rememberMemoryDraft() {
   state.memoryDrafts.set(state.botId, { id: state.memoryId, revision: state.memoryRevision, title: $('memory-title').value, content: $('memory-content').value, scope: $('memory-scope').value, kind: $('memory-kind').value });
@@ -564,6 +589,8 @@ $('auth-model').addEventListener('change',()=>changeAuth('POST','/api/auth/model
 $('auth-callback-form').addEventListener('submit',event=>{event.preventDefault();return changeAuth('POST','/api/auth/callback',{id:state.auth?.login?.id,url:$('auth-callback-url').value.trim()});});
 $('tasks-tab').addEventListener('click', () => setView('tasks'));
 $('memory-tab').addEventListener('click', () => setView('memory'));
+$('environment-tab').addEventListener('click', () => setView('environment'));
+$('schedules-tab').addEventListener('click', () => setView('schedules'));
 $('memory-search').addEventListener('input', renderMemory);
 $('memory-new').addEventListener('click', () => { resetMemoryForm(); state.memoryDrafts.delete(state.botId); renderMemory(); $('memory-title').focus(); });
 for (const id of ['memory-title', 'memory-content', 'memory-scope', 'memory-kind']) $(id).addEventListener('input', rememberMemoryDraft);
@@ -591,4 +618,260 @@ function renderTaskMemory() {
 for (const [inputId, formId] of [['task-prompt', 'task-form'], ['command-text', 'command-form']]) {
   $(inputId).addEventListener('keydown', (event) => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); $(formId).requestSubmit(); } });
 }
-renderControls(); refresh();
+// Management requests have independent cancellation and bot-selection fences.
+const environmentPath = (botId = state.botId) => `/api/bots/${encodeURIComponent(botId)}/environment`;
+const schedulePath = (botId = state.botId, scheduleId = '') => `/api/bots/${encodeURIComponent(botId)}/schedules${scheduleId ? `/${encodeURIComponent(scheduleId)}` : ''}`;
+function cancelManagementLoads() {
+  for (const controller of management.loads.values()) controller.abort();
+  management.loads.clear(); management.environmentLoading = false; management.schedulesLoading = false;
+}
+function beginManagementLoad(kind) {
+  management.loads.get(kind)?.abort();
+  const controller = new AbortController(); management.loads.set(kind, controller); return controller;
+}
+function currentManagementLoad(kind, controller, botId, revision) {
+  return !controller.signal.aborted && management.loads.get(kind) === controller && botId === state.botId && revision === state.botRevision;
+}
+function rememberManagementDrafts() {
+  if (!state.botId) return;
+  if (management.policyDirty) management.policyDrafts.set(state.botId, { packages: $('environment-packages').value, hosts: $('environment-hosts').value, revision: management.policyRevision });
+  management.scheduleDrafts.set(state.botId, Object.fromEntries(['name', 'prompt', 'kind', 'run-at', 'cron', 'time-zone'].map(name => [name, $(`schedule-${name}`).value])));
+}
+function resetManagement() {
+  cancelManagementLoads();
+  management.environment = null; management.environmentError = ''; management.environmentMutationError = ''; management.policyRevision = null; management.policyDirty = false;
+  scheduleSignature = '';
+  management.schedules = null; management.scheduleStatus = null; management.schedulesError = ''; management.deleteId = null; management.historyId = null; management.history = null; management.historyError = '';
+  const policy = management.policyDrafts.get(state.botId);
+  $('environment-packages').value = policy?.packages || ''; $('environment-hosts').value = policy?.hosts || '';
+  if (policy) { management.policyDirty = true; management.policyRevision = policy.revision; }
+  const draft = management.scheduleDrafts.get(state.botId);
+  for (const name of ['name', 'prompt', 'kind', 'run-at', 'cron', 'time-zone']) $(`schedule-${name}`).value = draft?.[name] || (name === 'kind' ? 'once' : name === 'time-zone' ? 'UTC' : '');
+  $('environment-stop-confirmation').hidden = true; setError('schedule-form-error');
+  renderEnvironment(); renderSchedules(); renderScheduleHistory();
+}
+function fact(list, name, value) { list.append(element('dt', '', name), element('dd', '', value)); }
+function renderTelegram() {
+  const telegram = state.status?.channels?.telegram, facts = $('telegram-facts'); facts.replaceChildren();
+  $('telegram-status').textContent = !telegram ? 'Readiness unavailable from this server.' : !telegram.enabled ? 'Disabled in the outer-host configuration.' : !telegram.configured ? 'Enabled, but private-chat setup is incomplete.' : telegram.online ? 'Channel polling is active. Configuration alone does not prove delivery.' : `Configured · ${telegram.status || 'waiting for worker'}.`;
+  if (telegram) {
+    fact(facts, 'Source', 'Outer-host channel process status'); fact(facts, 'Mode', telegram.mode || 'private-long-poll');
+    fact(facts, 'Bound bot', telegram.botId ? (state.bots.find(bot => bot.id === telegram.botId)?.name || telegram.botId) : 'Not bound');
+    fact(facts, 'Last seen', telegram.lastSeen ? fullDate(telegram.lastSeen) : 'Not yet observed');
+    const counts = Object.entries(telegram.deliveries || {}).filter(([, count]) => Number.isFinite(count)).map(([key, count]) => `${key}: ${count}`);
+    fact(facts, 'Deliveries', counts.length ? counts.join(' · ') : 'No delivery evidence');
+  }
+  // Only the documented token-free error field is displayed; never serialize configuration.
+  setError('telegram-error', telegram?.lastError || '');
+}
+function renderEnvironment() {
+  const environment = management.environment, policy = environment?.policy, capability = state.status?.capabilities;
+  $('environment-loading').hidden = !!environment || !!management.environmentError;
+  $('environment-loading').textContent = management.environmentLoading ? 'Loading environment…' : 'Choose Refresh status to inspect this environment.';
+  setError('environment-error', management.environmentMutationError || management.environmentError);
+  const facts = $('environment-facts'); facts.replaceChildren();
+  fact(facts, 'Source', 'API environment registry; last recorded worker state');
+  fact(facts, 'Profile', environment?.profile || state.status?.sandboxProfile || 'Unknown');
+  fact(facts, 'State', environment?.state || 'Not provisioned');
+  fact(facts, 'Last recorded', environment?.updatedAt ? fullDate(environment.updatedAt) : 'Not yet observed');
+  fact(facts, 'Container', environment?.containerName || 'Not provisioned');
+  const capabilities = $('environment-capabilities'); capabilities.replaceChildren();
+  fact(capabilities, 'Service profile', capability ? capability.serviceProfile ? 'Enabled' : 'Not enabled' : 'Not reported');
+  fact(capabilities, 'Network', capability?.network || 'Not reported');
+  fact(capabilities, 'Package install', capability?.packageInstall || 'Not reported');
+  $('environment-verification').textContent = 'Not live-verified. Registry state and controller tests do not verify container isolation, persistence or delivery.';
+  const stop = environment?.stop;
+  const stopPending = stop && ['pending', 'queued', 'requested', 'running'].includes(stop.state);
+  $('environment-stop-status').textContent = stop ? `Stop request: ${stop.state}${stop.error ? ` · ${stop.error}` : ''}` : '';
+  $('environment-stop').disabled = management.environmentBusy || !capability?.serviceProfile || !environment?.containerName || ['unprovisioned', 'stopped'].includes(environment?.state) || !!stopPending;
+  $('environment-stop-confirm').disabled = management.environmentBusy || !!stopPending;
+  $('environment-stop-back').disabled = management.environmentBusy;
+  $('environment-refresh').disabled = management.environmentBusy;
+  $('environment-policy-version').textContent = policy ? `Policy revision ${policy.revision} · ${management.policyDirty ? 'Unsaved edits keep the revision you started with.' : policy.updatedAt ? `Updated ${fullDate(policy.updatedAt)}.` : 'Default deny; no policy saved yet.'}` : 'Policy unavailable. Refresh status before editing.';
+  const disabled = management.environmentBusy || !policy;
+  for (const id of ['environment-packages', 'environment-hosts', 'environment-policy-save', 'environment-policy-reload']) $(id).disabled = disabled;
+  $('environment-policy-save').textContent = management.environmentBusy ? 'Working…' : 'Save allowlists';
+  renderTelegram();
+}
+async function loadEnvironment(botId = state.botId, revision = state.botRevision) {
+  if (!botId) return;
+  const controller = beginManagementLoad('environment'); management.environmentLoading = true; renderEnvironment();
+  try {
+    const result = await api(environmentPath(botId), { signal: controller.signal });
+    if (!currentManagementLoad('environment', controller, botId, revision)) return;
+    if (!result || typeof result !== 'object' || !result.policy || !Array.isArray(result.policy.allowedPackages) || !Array.isArray(result.policy.allowedHosts)) throw new Error('The server returned an invalid environment policy.');
+    management.environment = result; management.environmentError = '';
+    if (!management.policyDirty && !management.environmentBusy) {
+      $('environment-packages').value = result.policy.allowedPackages.join('\n'); $('environment-hosts').value = result.policy.allowedHosts.join('\n'); management.policyRevision = result.policy.revision;
+    }
+  } catch (error) { if (currentManagementLoad('environment', controller, botId, revision)) management.environmentError = error.message; }
+  finally { if (currentManagementLoad('environment', controller, botId, revision)) { management.environmentLoading = false; management.loads.delete('environment'); renderEnvironment(); } }
+}
+function allowlist(value) { return [...new Set(value.split(/[\n,]/).map(item => item.trim()).filter(Boolean))]; }
+async function saveEnvironmentPolicy(event) {
+  event.preventDefault(); if (management.environmentBusy || !state.botId || !management.environment?.policy) return;
+  const botId = state.botId, revision = state.botRevision;
+  const payload = { expectedRevision: management.policyRevision, allowedPackages: allowlist($('environment-packages').value), allowedHosts: allowlist($('environment-hosts').value) };
+  cancelManagementLoads(); management.environmentBusy = true; management.environmentError = ''; management.environmentMutationError = ''; renderEnvironment();
+  let saved = false;
+  try {
+    await api(`${environmentPath(botId)}/policy`, { method: 'PUT', body: JSON.stringify(payload) });
+    saved = true; management.policyDrafts.delete(botId);
+    if (botId === state.botId && revision === state.botRevision) { management.policyDirty = false; toast('Operator allowlists saved. They apply to future tool calls.'); }
+  } catch (error) { if (botId === state.botId && revision === state.botRevision) management.environmentMutationError = `${error.message} Your edits are kept. Reload the policy before resolving a revision conflict.`; }
+  finally { management.environmentBusy = false; renderEnvironment(); }
+  if (botId === state.botId && revision === state.botRevision && saved) await loadEnvironment(botId, revision);
+}
+async function stopEnvironment() {
+  if (management.environmentBusy || !state.botId || $('environment-stop-confirmation').hidden || $('environment-stop').disabled) return;
+  const botId = state.botId, revision = state.botRevision, key = `environment-stop:${botId}`;
+  const requestId = submission(key, { botId }); cancelManagementLoads(); management.environmentBusy = true; management.environmentError = ''; management.environmentMutationError = ''; renderEnvironment();
+  try {
+    await post(`${environmentPath(botId)}/stop`, { requestId }); state.submissions.delete(key);
+    if (botId === state.botId && revision === state.botRevision) {
+      management.environment.stop = { state: 'queued', error: null }; $('environment-stop-confirmation').hidden = true;
+      toast('Stop requested. Waiting for the worker to confirm.');
+    }
+  } catch (error) { if (botId === state.botId && revision === state.botRevision) management.environmentMutationError = `${error.message} Retrying here reuses the same stop request ID.`; }
+  finally { management.environmentBusy = false; renderEnvironment(); }
+  if (botId === state.botId && revision === state.botRevision && !management.environmentMutationError) { await loadEnvironment(botId, revision); refresh(); }
+}
+function renderScheduleForm() {
+  const cron = $('schedule-kind').value === 'cron';
+  $('schedule-once-fields').hidden = cron; $('schedule-cron-fields').hidden = !cron;
+  $('schedule-run-at').required = !cron; $('schedule-cron').required = cron; $('schedule-time-zone').required = cron;
+  for (const name of ['name', 'prompt', 'kind', 'run-at', 'cron', 'time-zone']) $(`schedule-${name}`).disabled = management.scheduleBusy || !state.botId;
+  $('schedule-create').disabled = management.scheduleBusy || !state.botId || !management.schedules;
+  $('schedule-create').textContent = management.scheduleBusy ? 'Saving…' : 'Create schedule';
+  $('schedules-refresh').disabled = management.scheduleBusy;
+}
+function renderSchedules() {
+  renderScheduleForm(); setError('schedules-error', management.schedulesError);
+  const count = management.scheduleStatus?.counts;
+  $('schedules-status').textContent = !management.schedules ? 'Loading schedules…' : `Source: local schedule registry · ${count?.active ?? management.schedules.filter(s => s.state === 'active').length} active · ${count?.paused ?? management.schedules.filter(s => s.state === 'paused').length} paused · Worker ${state.status?.worker?.online ? 'connected' : 'offline; queued work waits'}.`;
+  const signature = JSON.stringify([management.schedules, management.scheduleBusy, management.schedulesError, management.deleteId, state.tasks.map(task => [task.id, task.state])]);
+  if (signature === scheduleSignature) return; scheduleSignature = signature;
+  const list = $('schedule-list'); list.replaceChildren();
+  if (!management.schedules?.length) list.append(element('p', 'memory-empty', !management.schedules ? management.schedulesError ? 'Schedules could not load. Refresh to try again.' : 'Loading saved schedules…' : 'No schedules yet. Add one for work you want this bot to repeat or start later.'));
+  for (const schedule of management.schedules || []) {
+    const card = element('article', 'management-card schedule-card');
+    const heading = element('div', 'section-heading'); heading.append(element('h3', '', schedule.name), element('span', 'schedule-state', ({ active: 'Active schedule', paused: 'Paused schedule', completed: 'Finished schedule' })[schedule.state] || schedule.state));
+    const timing = schedule.kind === 'cron' ? `${schedule.cron} · ${schedule.timeZone}` : `Once · ${fullDate(schedule.runAt)} (your display time)`;
+    card.append(heading, element('p', 'schedule-meta', timing), element('p', 'schedule-prompt', schedule.prompt));
+    const lastTask = state.tasks.find(task => task.id === schedule.lastTaskId);
+    card.append(element('p', 'schedule-meta', `Next: ${schedule.nextRunAt ? fullDate(schedule.nextRunAt) : 'None scheduled'} · Last fire: ${schedule.lastFireAt ? fullDate(schedule.lastFireAt) : 'Not yet'}`));
+    if (schedule.lastTaskId) card.append(element('p', 'schedule-meta', `Last task: ${schedule.lastTaskId}${lastTask ? ` · ${LABELS[lastTask.state] || lastTask.state}` : ' · Check task history for its outcome'}`));
+    const actions = element('div', 'management-actions');
+    if (schedule.state === 'active' || schedule.state === 'paused') {
+      const action = schedule.state === 'active' ? 'pause' : 'resume', button = element('button', 'button', action === 'pause' ? 'Pause' : 'Resume');
+      button.type = 'button'; button.disabled = management.scheduleBusy; button.addEventListener('click', () => changeSchedule(schedule.id, action)); actions.append(button);
+    }
+    const history = element('button', 'text-button', 'Run history'); history.type = 'button'; history.addEventListener('click', () => showScheduleHistory(schedule.id)); actions.append(history);
+    const remove = element('button', 'text-button', 'Delete'); remove.type = 'button'; remove.disabled = management.scheduleBusy; remove.addEventListener('click', () => { management.deleteId = schedule.id; renderSchedules(); }); actions.append(remove);
+    card.append(actions);
+    if (management.deleteId === schedule.id) {
+      const note = element('div', 'state-note schedule-delete-note', 'Delete this schedule? Future runs stop. Already queued tasks and run history remain.');
+      const buttons = element('div', 'management-actions'), keep = element('button', 'text-button', 'Keep schedule'), confirm = element('button', 'button button-danger', 'Confirm delete');
+      keep.type = confirm.type = 'button'; keep.disabled = confirm.disabled = management.scheduleBusy;
+      keep.addEventListener('click', () => { management.deleteId = null; renderSchedules(); }); confirm.addEventListener('click', () => changeSchedule(schedule.id, 'delete'));
+      buttons.append(keep, confirm); note.append(buttons); card.append(note);
+    }
+    list.append(card);
+  }
+}
+async function loadSchedules(botId = state.botId, revision = state.botRevision) {
+  if (!botId) return;
+  const controller = beginManagementLoad('schedules'); management.schedulesLoading = true;
+  try {
+    const result = await api(schedulePath(botId), { signal: controller.signal });
+    if (!currentManagementLoad('schedules', controller, botId, revision)) return;
+    if (!Array.isArray(result.schedules)) throw new Error('The server returned an invalid schedule list.');
+    management.schedules = result.schedules; management.scheduleStatus = result.status; management.schedulesError = '';
+  } catch (error) { if (currentManagementLoad('schedules', controller, botId, revision)) management.schedulesError = error.message; }
+  finally { if (currentManagementLoad('schedules', controller, botId, revision)) { management.schedulesLoading = false; management.loads.delete('schedules'); renderSchedules(); } }
+}
+function scheduleInput() {
+  const name = $('schedule-name').value.trim(), prompt = $('schedule-prompt').value.trim(), kind = $('schedule-kind').value;
+  if (!name || !prompt) throw new Error('Add a name and a task prompt.');
+  if (kind === 'cron') {
+    const cron = $('schedule-cron').value.trim().replace(/\s+/g, ' '), timeZone = $('schedule-time-zone').value.trim();
+    if (cron.split(' ').length !== 5) throw new Error('Use five cron fields: minute hour day month weekday.');
+    try { if (!timeZone) throw new Error(); new Intl.DateTimeFormat('en', { timeZone }); } catch { throw new Error('Use a valid IANA time zone, such as Asia/Shanghai or UTC.'); }
+    return { name, prompt, kind, cron, timeZone };
+  }
+  const input = $('schedule-run-at').value, runAt = Date.parse(`${input}Z`);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(input) || !Number.isFinite(runAt) || new Date(runAt).toISOString().slice(0, 16) !== input) throw new Error('Choose a future date and time in UTC.');
+  return { name, prompt, kind: 'once', runAt, timeZone: 'UTC' };
+}
+async function createSchedule(event) {
+  event.preventDefault(); if (management.scheduleBusy || !state.botId || !management.schedules) return;
+  setError('schedule-form-error'); let payload;
+  try { payload = scheduleInput(); } catch (error) { setError('schedule-form-error', error.message); return; }
+  const botId = state.botId, revision = state.botRevision, key = `schedule-create:${botId}`;
+  // A timed-out accepted once schedule may now be overdue. The same request ID must
+  // still be retryable so the durable server ledger can return its existing record.
+  if (payload.kind === 'once' && payload.runAt <= Date.now() && state.submissions.get(key)?.signature !== JSON.stringify(payload)) { setError('schedule-form-error', 'Choose a future date and time in UTC.'); return; }
+  const requestId = submission(key, payload);
+  cancelManagementLoads(); management.scheduleBusy = true; rememberManagementDrafts(); renderSchedules();
+  try {
+    const result = await post(schedulePath(botId), { requestId, ...payload });
+    if (!result.id) throw new Error('The server did not confirm the new schedule.');
+    state.submissions.delete(key); management.scheduleDrafts.delete(botId);
+    if (botId === state.botId && revision === state.botRevision) { $('schedule-name').value = ''; $('schedule-prompt').value = ''; toast('Schedule created. The worker will queue its tasks when due.'); }
+  } catch (error) { if (botId === state.botId && revision === state.botRevision) setError('schedule-form-error', `${error.message} Your draft is kept. Retrying the same details reuses its request ID.`); }
+  finally { management.scheduleBusy = false; renderSchedules(); }
+  if (botId === state.botId && revision === state.botRevision) await loadSchedules(botId, revision);
+}
+async function changeSchedule(scheduleId, action) {
+  if (management.scheduleBusy || !state.botId || !['pause', 'resume', 'delete'].includes(action)) return;
+  if (action === 'delete' && management.deleteId !== scheduleId) return;
+  const botId = state.botId, revision = state.botRevision; cancelManagementLoads(); management.scheduleBusy = true; management.schedulesError = ''; renderSchedules();
+  try {
+    await api(`${schedulePath(botId, scheduleId)}${action === 'delete' ? '' : `/${action}`}`, { method: action === 'delete' ? 'DELETE' : 'POST', body: '{}' });
+    if (botId === state.botId && revision === state.botRevision) { management.deleteId = null; toast(action === 'delete' ? 'Schedule deleted. Already queued tasks are unchanged.' : action === 'pause' ? 'Schedule paused.' : 'Schedule resumed.'); }
+  } catch (error) { if (botId === state.botId && revision === state.botRevision) management.schedulesError = `${error.message} Refresh schedules to check the current state.`; }
+  finally { management.scheduleBusy = false; renderSchedules(); }
+  if (botId === state.botId && revision === state.botRevision && !management.schedulesError) await loadSchedules(botId, revision);
+}
+function showScheduleHistory(id) {
+  management.historyId = id; management.history = null; management.historyError = ''; renderScheduleHistory();
+  return loadScheduleHistory(id);
+}
+function renderScheduleHistory() {
+  $('schedule-history-panel').hidden = !management.historyId;
+  const schedule = management.schedules?.find(item => item.id === management.historyId);
+  $('schedule-history-title').textContent = schedule ? `Run history · ${schedule.name}` : 'Run history';
+  setError('schedule-history-error', management.historyError); const list = $('schedule-history-list'); list.replaceChildren();
+  if (!management.history?.length) list.append(element('p', 'memory-description', !management.history ? management.historyError ? 'Run history unavailable.' : 'Loading run history…' : 'This schedule has not fired yet.'));
+  for (const fire of management.history || []) {
+    const row = element('div', 'schedule-history-row'), task = state.tasks.find(item => item.id === fire.taskId);
+    row.append(element('strong', '', fire.outcome === 'queued' ? 'Task queued' : fire.outcome === 'skipped_overlap' ? 'Skipped: previous run still active' : fire.outcome), element('p', 'memory-description', `Due ${fullDate(fire.scheduledAt)} · Observed ${fullDate(fire.observedAt)}${fire.coalesced ? ' · Missed cron runs coalesced' : ''}`));
+    if (fire.taskId) row.append(element('p', 'memory-description', `Task ${fire.taskId}${task ? ` · ${LABELS[task.state] || task.state}` : ''}`));
+    list.append(row);
+  }
+}
+async function loadScheduleHistory(id, botId = state.botId, revision = state.botRevision) {
+  if (!botId || id !== management.historyId) return;
+  const controller = beginManagementLoad('history');
+  try {
+    const result = await api(`${schedulePath(botId, id)}/history`, { signal: controller.signal });
+    if (!currentManagementLoad('history', controller, botId, revision) || management.historyId !== id) return;
+    if (!Array.isArray(result)) throw new Error('The server returned an invalid run history.');
+    management.history = result; management.historyError = '';
+  } catch (error) { if (currentManagementLoad('history', controller, botId, revision) && management.historyId === id) management.historyError = error.message; }
+  finally { if (currentManagementLoad('history', controller, botId, revision) && management.historyId === id) { management.loads.delete('history'); renderScheduleHistory(); } }
+}
+$('environment-refresh').addEventListener('click', () => loadEnvironment());
+$('environment-policy-form').addEventListener('submit', saveEnvironmentPolicy);
+for (const id of ['environment-packages', 'environment-hosts']) $(id).addEventListener('input', () => { management.policyDirty = true; rememberManagementDrafts(); });
+$('environment-policy-reload').addEventListener('click', () => { if (management.environmentBusy) return; management.policyDirty = false; management.environmentMutationError = ''; management.policyDrafts.delete(state.botId); return loadEnvironment(); });
+$('environment-stop').addEventListener('click', () => { if (!$('environment-stop').disabled) $('environment-stop-confirmation').hidden = false; });
+$('environment-stop-back').addEventListener('click', () => { $('environment-stop-confirmation').hidden = true; });
+$('environment-stop-confirm').addEventListener('click', stopEnvironment);
+$('schedules-refresh').addEventListener('click', () => loadSchedules());
+$('schedule-form').addEventListener('submit', createSchedule);
+$('schedule-kind').addEventListener('change', () => { renderScheduleForm(); rememberManagementDrafts(); });
+for (const name of ['name', 'prompt', 'kind', 'run-at', 'cron', 'time-zone']) $(`schedule-${name}`).addEventListener('input', rememberManagementDrafts);
+$('schedule-history-close').addEventListener('click', () => { management.loads.get('history')?.abort(); management.loads.delete('history'); management.historyId = null; renderScheduleHistory(); });
+
+renderControls(); renderScheduleForm(); refresh();

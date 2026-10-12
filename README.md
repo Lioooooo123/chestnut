@@ -1,10 +1,10 @@
 # Chestnut 🌰
 
-个人 self-hosted 多 Bot 工作平台的第一版控制面基线。Bot 负责接收、排队和显示状态，独立 Worker 在隔离环境中运行 Pi。
+个人 self-hosted 多 Bot 工作平台，当前为 Memoh-inspired 有边界的功能里程碑。Bot 负责接收、排队和显示状态，独立 Worker 在隔离环境中运行 Pi。
 
-**持久可写 Root 环境的实验后端已实现并通过模拟生命周期测试；真实 VPS 验收、受控在线安装和后台服务连续运行尚未完成，不能视为完整平台已完成。** 默认仍是只读 OS 的受限后端。实验后端见 [docs/persistent-backend.md](docs/persistent-backend.md)，后续验收见 [docs/persistent-bot-next.md](docs/persistent-bot-next.md)。
+**本次已实现并测试：协议/记忆/OAuth修复、持久排期、Telegram私聊适配器、独立稳定Root环境、受控包安装/HTTPS读取和管理界面。真实Docker、在线模型/Telegram、包安装与服务连续性仍未验收，不能视为完整Memoh或可生产部署版本。** 默认保持受限的ephemeral profile。新service profile见[设计与边界](docs/service-profile.md)，必须完成[实机验收](docs/service-acceptance.md)。
 
-这是第一版源码，尚未部署或连接真实模型。Pi 的完整官方源码已纳入 `vendor/pi/`，固定到 `4270522473e677ddba7b093caa0064a3df51d459`，不是换个名字调用 registry SDK。Dashboard 是无需构建的原生 JavaScript 客户端。本机 macOS 已完成无模型演示、Unix socket 集成和 Safari 桌面基本交互验收；真实执行后端仍以 Linux 为目标，验证边界见 [docs/verification.md](docs/verification.md)。
+这次交付未部署、未登录或连接真实模型/Telegram。Pi 的完整官方源码已纳入 `vendor/pi/`，固定到 `4270522473e677ddba7b093caa0064a3df51d459`，不是换个名字调用 registry SDK。Dashboard 是无需构建的原生 JavaScript 客户端。先前版本曾在macOS完成无模型演示与基础Safari检查；它不能证明本次改动。当前实现仍以Linux为目标，最新验证与历史记录见 [docs/verification.md](docs/verification.md)。
 
 ## 先运行演示
 
@@ -49,7 +49,7 @@ npm run pi:build
 ```
 
 3. 参考 `.env.example`，设置 `CHESTNUT_MODE=pi`、新的短路径 `CHESTNUT_DATA_DIR` 和 `CHESTNUT_MODEL`。Demo 与 Pi 数据目录不可混用。镜像默认 `chestnut-pi:4270522473e6`。
-4. 通过外层 Worker 环境/密钥管理器配置 `OPENAI_API_KEY`。目前只支持固定官方 OpenAI Chat Completions 路由、一个配置模型、文本和 function tools。
+4. 通过外层 Worker 环境/密钥管理器配置 `OPENAI_API_KEY`。也可以在Dashboard通过ChatGPT授权选择模型，使用固定官方Responses路由。凭据只留在外层，运行中的任务绑定授权代次与模型，换号/换模型后旧任务会停止。
 5. `npm run doctor` 后运行 `npm run dev`。API、Worker、Rootless Docker 需使用同一专用 OS 用户，以便访问 mode-0600 的网关 socket。
 
 容器网络固定为 none。外层可信网关持有密钥，每次请求检查任务/lease；容器只挂载本次 Run 的 Unix socket，用无密钥 loopback relay 调用允许的模型。没有 Docker 时会拒绝执行，不会回退到宿主机运行 Agent Shell。API Key 不写入数据库、不注入容器。
@@ -71,6 +71,16 @@ CHESTNUT_DATA_DIR=/home/you/chestnut-persistent
 
 还需要 util-linux 的 `flock`。固定 Bot 容器会保留可写 rootfs，正常结束、取消和恢复均停止整个 Bot，不删除其 OS 文件。缺失/替换的已记录容器不会自动重建。外层 OS 锁和可信 Docker 控制进程防止旧 Worker 的延迟操作与新任务交叉；不确定操作会保留锁并要求人工检查。运行中的服务会被停止；在线软件安装仍被拒绝，不会偷偷改成普通 bridge 网络。此 profile 尚无真实 Docker/VPS 验收。
 
+### 新 service profile、排期和渠道
+
+新service profile把常驻Root环境与每次Pi任务分开：正常成功任务可保留服务，取消/失败/不确定状态会停整个环境，rootfs保留。使用新的数据目录并明确设置CHESTNUT_SANDBOX_PROFILE=service与CHESTNUT_EXPERIMENTAL_SERVICE=1。不要在旧profile目录隐式切换。[具体配置与网络边界](docs/service-profile.md)
+
+Environment页管理包/HTTPS域名白名单与停止环境；默认都不允许。包安装通过固定可信下载器验证Debian签名和SHA256，导入后只在network-none的Bot里安装。下载器明确使用bridge但不挂载Bot数据/凭据；这不是通用网络出口。
+
+Schedules页支持一次性任务和带IANA时区的5段cron，持久化触发、暂停/恢复、历史、重启去重与重叠跳过。[排期语义](docs/schedules.md)
+
+Telegram适配器只接受指定owner的指定私聊，独立长轮询进程处理状态、steer、cancel和follow-up。token只进渠道进程；通知有持久账本，发送结果不明时不盲重发。[配置与待验收项](docs/telegram-channel.md)
+
 ## 本版行为
 
 - SQLite WAL：Bots、Tasks、Runs、Commands、Events、Approvals、Outbox、Worker 心跳和环境锁。
@@ -87,8 +97,8 @@ CHESTNUT_DATA_DIR=/home/you/chestnut-persistent
 
 ## 明确的限制
 
-- 默认 profile 是每 Bot 持久 workspace + 每 Task 独立 Pi session，根文件系统只读且每 Run 重建。实验 persistent profile 保存每 Bot 的可写容器根文件系统，按 Task 执行，但每次任务结束会停止整个 Bot，保留文件而不保留运行中服务。两种 profile 都没有每 Task Git worktree或任意 apt/git/pip 在线安装能力。
-- 没有通用网络出口、外部集成凭据、自动授权执行审批、DAG、Redis、Temporal 或多人权限。Approvals 表是保留结构，不能当成完整审批功能。
+- 默认 profile 是每 Bot 持久 workspace + 每 Task 独立 Pi session，根文件系统只读且每 Run 重建。实验 persistent profile 保存每 Bot 的可写容器根文件系统，按 Task 执行，但每次任务结束会停止整个 Bot，保留文件而不保留运行中服务。新service profile另见上文。所有profile都没有每Task Git worktree，shell中没有任意apt/git/pip在线能力。受控包安装是单独的显式工具。
+- 没有通用网络出口、完整外部集成市场、自动授权执行审批、DAG、Redis、Temporal或多人权限。Telegramtoken由独立外层渠道进程保管。Approvals 表是保留结构，不能当成完整审批功能。
 - 根容器工具不依靠自身 hook 自我审批。当前可用能力由外层固定挂载和模型网关限制；新增外部能力必须另做可信授权。
 - Rootless + network-none 不是恶意代码的强隔离保证。启动前要求 CPU/内存/PID/swap 控制，但实际执行仍待 VPS 验证；workspace/session 和持久容器可写层没有应用管理的磁盘配额，可能占满磁盘。请用专用账户和独立、有限额的数据卷；不要挂载自己的敏感目录。
 - 模型网关限制单请求大小、输出 token、并发和超时，但没有总金额/总 token 预算；允许的模型能力仍可能产生费用。V1 不适合把模型能力交给不可信租户。

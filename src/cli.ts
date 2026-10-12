@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { config, prepareStorage } from './config.ts';
 import { Store } from './store.ts';
 import { createApi } from './api.ts';
+import { TelegramChannelRunner, telegramConfig, telegramReadiness } from './channels/telegram.ts';
 import { Worker } from './worker.ts';
 import { assertRootless,assertResourceControls } from './sandbox/rootless-docker.ts';
 const c=config();prepareStorage(c);
@@ -17,7 +18,8 @@ if(command==='doctor'){
   // Initialize the WAL/schema once before the two processes first open a new database.
   const initialStore = new Store(c.dbPath); initialStore.close();
   const entry=fileURLToPath(import.meta.url);
-  const children=['api','worker'].map(role=>spawn(process.execPath,[entry,role],{stdio:'inherit',env:role==='api'?{...process.env,CHESTNUT_API_KEY_CONFIGURED:c.apiKey?'1':'0',OPENAI_API_KEY:undefined}:process.env}));
+  const roles=['api','worker',...(process.env.CHESTNUT_TELEGRAM_ENABLED==='1'?['channel']:[])];
+  const children=roles.map(role=>spawn(process.execPath,[entry,role],{stdio:'inherit',env:{...process.env,CHESTNUT_API_KEY_CONFIGURED:c.apiKey?'1':'0',CHESTNUT_TELEGRAM_TOKEN_CONFIGURED:process.env.CHESTNUT_TELEGRAM_BOT_TOKEN?'1':'0',...(role==='worker'?{}:{OPENAI_API_KEY:undefined}),...(role==='channel'?{}:{CHESTNUT_TELEGRAM_BOT_TOKEN:undefined})}}));
   let ending=false;
   const stop=()=>{if(ending)return;ending=true;for(const child of children)child.kill('SIGTERM');};
   process.on('SIGINT',stop);process.on('SIGTERM',stop);
@@ -31,4 +33,8 @@ if(command==='doctor'){
   process.once('SIGINT',()=>void worker.stop());process.once('SIGTERM',()=>void worker.stop());
   console.log(`Chestnut worker ${worker.id} (${c.mode}, concurrency 1)`);
   try{await worker.run();}finally{s.close();}
-}else{throw new Error('Usage: node src/cli.ts dev|api|worker|doctor');}
+}else if(command==='channel'){
+  const settings=telegramConfig();if(!settings)throw new Error('Telegram channel is disabled; configure CHESTNUT_TELEGRAM_ENABLED=1 explicitly');
+  const s=new Store(c.dbPath),runner=new TelegramChannelRunner(s,settings);process.once('SIGINT',()=>runner.stop());process.once('SIGTERM',()=>runner.stop());
+  try{await runner.run();if(telegramReadiness(s).status==='blocked')process.exitCode=1;}finally{s.close();}
+}else{throw new Error('Usage: node src/cli.ts dev|api|worker|channel|doctor');}

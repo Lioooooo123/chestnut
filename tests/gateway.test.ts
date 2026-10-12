@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { request as httpRequest, type IncomingMessage, type Server, type RequestOptions } from 'node:http';
 import { Duplex } from 'node:stream';
+import { existsSync } from 'node:fs';
 import type { Socket } from 'node:net';
 import { mkdtemp, lstat, mkdir, rm, symlink, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -337,4 +338,85 @@ test('Responses denies hosted tools, external content, previous response referen
   const good={model,stream:true,store:false,input:[{role:'user',content:'hello'}]};
   for(const changed of [{...good,stream:false},{...good,store:true},{...good,previous_response_id:'other'},{...good,tools:[{type:'web_search'}]},{...good,input:[{type:'item_reference',id:'other'}]},{...good,input:[{role:'user',content:[{type:'input_image',image_url:'https://outside.invalid/'}]}]}])assert.equal((await call(f.socketPath,changed,{path:'/v1/responses'})).status,400);
   assert.equal(calls,0);
+});
+
+test('Responses replay accepts only assistant phase values, Chestnut functions and inline encrypted reasoning',async t=>{
+  let credentials=0;
+  const f=await fixture(t,{apiProtocol:'responses',getApiKey:async()=>{credentials++;return 'oauth-secret';}});
+  const requestBody={model,stream:true,store:false,input:[] as unknown[]};
+  const message={type:'message',role:'assistant',id:'msg_test',status:'completed',content:[{type:'output_text',text:'Working',annotations:[]}]};
+  for(const phase of ['commentary','final_answer'])assert.equal((await call(f.socketPath,{...requestBody,input:[{...message,phase}]},{path:'/v1/responses'})).status,200);
+  const before=credentials;
+  for(const item of [
+    {...message,phase:'analysis'}, {...message,phase:17}, {...message,role:'user',phase:'commentary'}, {...message,status:'fetch_remote'},
+    {...message,content:[{type:'output_text',text:'Text',annotations:[{type:'url_citation',url:'https://outside.invalid'}]}]},
+    {type:'reasoning',id:'rs_test',summary:[]}, {type:'reasoning',id:'rs_test',summary:[],encrypted_content:''},
+    {type:'reasoning',id:'rs_test',summary:[{type:'input_image',image_url:'https://outside.invalid'}],encrypted_content:'opaque'},
+    {type:'function_call',call_id:'call_test',name:'read',arguments:'{}',namespace:'hosted'},
+    {type:'function_call_output',call_id:'call_test',output:[{type:'input_file',file_id:'file_remote'}]},
+  ])assert.equal((await call(f.socketPath,{...requestBody,input:[item]},{path:'/v1/responses'})).status,400);
+  assert.equal(credentials,before,'invalid replay is rejected before credential access');
+});
+
+test('both Pi profiles advertise Responses reasoning capability',async()=>{
+  for(const path of ['container-entry.mjs','persistent-task-entry.mjs']){
+    const source=await readFile(new URL(`../src/sandbox/${path}`,import.meta.url),'utf8');
+    assert.match(source,/reasoning:\s*protocol==='responses'/,path);
+  }
+});
+
+test('pinned Pi streams a synthetic response and replays reasoning, assistant phase and tool result through gateway',{
+  skip:!existsSync(new URL('../vendor/pi/node_modules/openai/package.json',import.meta.url))?'Install vendor/pi dependencies to run the pinned Pi roundtrip':false,
+},async t=>{
+  // Import the actual pinned converter and SDK stream parser; no copied wire fixture
+  // is used to create either request. Requires the documented Pi dependencies.
+  const pi=await import(new URL('../vendor/pi/packages/ai/src/api/openai-responses.ts',import.meta.url).href);
+  for(const [reasoning,phase] of [[true,'commentary'],[false,'final_answer']] as const){
+    const sent:any[]=[];
+    const f=await fixture(t,{apiProtocol:'responses',getApiKey:async()=> 'synthetic-oauth-token',fetchImpl:async(_url,options)=>{
+      const body=JSON.parse(options!.body as string);sent.push(body);
+      assert.deepEqual(body.include,['reasoning.encrypted_content']);
+      const first=sent.length===1;
+      const reasoningItem={type:'reasoning',id:'rs_synthetic',summary:[],encrypted_content:'synthetic-opaque-reasoning'};
+      const message={type:'message',id:first?'msg_plan':'msg_done',role:'assistant',status:'completed',phase:first?phase:'final_answer',content:[{type:'output_text',text:first?'Checking the workspace.':'Done.',annotations:[]}]};
+      const output=first?[reasoningItem,message,{type:'function_call',id:'fc_read',call_id:'call_read',name:'read',namespace:'chestnut',arguments:'{"path":"README.md"}',status:'completed'}]:[message];
+      const events=output.flatMap((item,index)=>[
+        {type:'response.output_item.added',output_index:index,item},
+        // Exercise Pi's terminal-event encrypted-content backfill as well.
+        {type:'response.output_item.done',output_index:index,item:item.type==='reasoning'?{...item,encrypted_content:undefined}:item},
+      ]);
+      events.push({type:'response.completed',response:{id:`resp_${sent.length}`,status:'completed',output}} as any);
+      return new Response(events.map(event=>`data: ${JSON.stringify(event)}\n\n`).join(''),{headers:{'content-type':'text/event-stream'}});
+    }});
+    const piModel={id:model,name:model,provider:'chestnut',api:'openai-responses',baseUrl:'http://127.0.0.1:4011/v1',reasoning,input:['text'],contextWindow:128000,maxTokens:8192,cost:{input:0,output:0,cacheRead:0,cacheWrite:0},compat:{supportsDeveloperRole:false,supportsStore:false}};
+    const messages:any[]=[{role:'system',content:'Use the local read tool.',timestamp:0,toolsAdded:[{name:'read',description:'Read a local file',parameters:{type:'object',properties:{path:{type:'string'}},required:['path']}}]},{role:'user',content:'Read README.md.',timestamp:1}];
+    const fetchFromGateway:typeof fetch=async(_url,options)=>{
+      const response=await call(f.socketPath,JSON.parse(options!.body as string),{path:'/v1/responses'});
+      assert.equal(response.status,200,response.text);
+      return new Response(response.text,{status:response.status,headers:{'content-type':'text/event-stream'}});
+    };
+    const options={apiKey:'chestnut-local-no-secret',fetch:fetchFromGateway,maxRetries:0,...(reasoning?{reasoningEffort:'medium'}:{})};
+    const assistant=await pi.stream(piModel,{messages},options).result();
+    assert.equal(assistant.stopReason,'toolUse',assistant.errorMessage);
+    const callBlock=assistant.content.find((part:any)=>part.type==='toolCall');assert.ok(callBlock);
+    const signature=JSON.parse(assistant.content.find((part:any)=>part.type==='text').textSignature);
+    assert.equal(signature.phase,phase);
+    messages.push(assistant,{role:'toolResult',toolCallId:callBlock.id,toolName:'read',content:[{type:'text',text:'Synthetic README contents.'}],isError:false,timestamp:2});
+    const result=await pi.stream(piModel,{messages},options).result();
+    assert.equal(result.stopReason,'stop',result.errorMessage);assert.equal(sent.length,2);
+    const replay=sent[1].input;
+    assert.equal(replay.find((item:any)=>item.type==='message'&&item.role==='assistant').phase,phase);
+    assert.equal(replay.find((item:any)=>item.type==='reasoning').encrypted_content,'synthetic-opaque-reasoning');
+    const replayCall=replay.find((item:any)=>item.type==='function_call');
+    assert.equal(replayCall.namespace,'chestnut');
+    assert.deepEqual(replay.find((item:any)=>item.type==='function_call_output'),{type:'function_call_output',call_id:replayCall.call_id,output:'Synthetic README contents.'});
+    assert.equal(sent[1].tools[0].name,'chestnut');
+  }
+});
+
+test('gateway rechecks the grant after asynchronous credential resolution',async t=>{
+  let allowed=true,upstreamCalls=0;
+  const f=await fixture(t,{apiProtocol:'responses',authorize:()=>allowed,getApiKey:async()=>{allowed=false;return 'old-grant-only';},fetchImpl:async()=>{upstreamCalls++;return new Response();}});
+  const response=await call(f.socketPath,{model,stream:true,store:false,input:[{role:'user',content:'Private old task context'}]},{path:'/v1/responses'});
+  assert.equal(response.status,403);assert.equal(upstreamCalls,0);
 });

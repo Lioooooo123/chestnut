@@ -7,14 +7,21 @@ import { randomUUID } from 'node:crypto';
 import { Store } from '../src/store.ts';
 import { config } from '../src/config.ts';
 import { MemoryRepository } from '../src/memory/repository.ts';
-import { MemoryMaintenance, type MaintenanceProvider } from '../src/memory/maintenance.ts';
+import { MemoryMaintenance, explicitMaintenanceProvider, type MaintenanceInput, type MaintenanceProvider } from '../src/memory/maintenance.ts';
 function fixture(provider?: MaintenanceProvider) {
   const root = mkdtempSync(join(realpathSync(tmpdir()), 'cn-maint-'));
   const c = config({ CHESTNUT_DATA_DIR: root });
   const store = new Store(join(root, 'db.sqlite')); const bot = store.createBot('Memory');
   const repo = new MemoryRepository(join(root, 'control', 'memory'));
   const maintenance = new MemoryMaintenance(store, c, provider);
-  const finish = (prompt: string) => { const task = store.submit(bot.id, randomUUID(), prompt); const run = store.claim(randomUUID())!; store.finish(run, 'succeeded', 'Verified result.', null); return task; };
+  const finish = (prompt: string, steering: string[] = [], result = 'Verified result.') => {
+    const task = store.submit(bot.id, randomUUID(), prompt); const run = store.claim(randomUUID())!;
+    for (const text of steering) {
+      store.command(bot.id, task.id, randomUUID(), 'steer', text);
+      const command = store.takeCommand(run)!; assert.equal(store.finishCommand(run, command.id, true), true);
+    }
+    assert.equal(store.finish(run, 'succeeded', result, null), true); return task;
+  };
   return { root, c, store, bot, repo, maintenance, finish, close() { store.close(); rmSync(root, { recursive: true, force: true }); } };
 }
 test('automatic explicit memories persist with source, incremental cursor and no duplicate after restart', async () => {
@@ -139,5 +146,87 @@ test('a committed manual Dreaming result is recovered without replaying inferenc
     f.store.db.prepare("UPDATE memory_jobs SET requested=?,lastRequest=NULL,state='running',token=?,leaseUntil=0 WHERE botId=?").run(request,randomUUID(),f.bot.id);
     await new MemoryMaintenance(f.store,f.c,async () => { calls++; throw new Error('Must not infer again'); }).tick();
     assert.equal(calls,count); assert.equal(f.repo.snapshot(f.bot.id).version,version); assert.equal(f.maintenance.status(f.bot.id).state,'succeeded'); assert.equal(f.maintenance.status(f.bot.id).requested,null);
+  } finally { f.close(); }
+});
+test('oversized task sources share one bound and do not starve later smaller tasks', async () => {
+  const inputs: MaintenanceInput[] = [];
+  const f = fixture(async input => { inputs.push(input); return explicitMaintenanceProvider(input); });
+  try {
+    const large = f.finish('P'.repeat(3200), Array.from({ length: 5 }, (_, i) => String(i).repeat(3200)));
+    const small = f.finish('Remember: Keep behavior tests concise.');
+    const terminal = (id: string) => f.store.events(f.bot.id, id).find(e => e.type === 'task.succeeded')!.seq;
+    await f.maintenance.tick();
+    assert.equal(inputs.length, 1);
+    assert.deepEqual(inputs[0]!.tasks.map(t => t.id), [large.id]);
+    assert.equal(inputs[0]!.tasks[0]!.user.join('').length + inputs[0]!.tasks[0]!.result.length, 16000);
+    assert.equal(f.repo.maintenanceState(f.bot.id).cursor, terminal(large.id));
+    assert.equal(f.repo.snapshot(f.bot.id).entries.length, 0);
+    await f.maintenance.tick();
+    assert.equal(inputs.length, 2);
+    assert.deepEqual(inputs[1]!.tasks.map(t => t.id), [small.id]);
+    assert.equal(f.repo.maintenanceState(f.bot.id).cursor, terminal(small.id));
+    assert.equal(f.repo.snapshot(f.bot.id).entries[0]?.content, 'Keep behavior tests concise.');
+    const budget = f.store.get<{ calls: number; characters: number }>('SELECT calls,characters FROM memory_budget')!;
+    assert.equal(budget.calls, inputs.length);
+    assert.equal(budget.characters, inputs.reduce((sum, input) => sum + JSON.stringify({ tasks: input.tasks, entries: input.entries }).length, 0));
+    const version = f.repo.snapshot(f.bot.id).version;
+    await f.maintenance.tick(); assert.equal(inputs.length, 2); assert.equal(f.repo.snapshot(f.bot.id).version, version);
+    assert.equal(f.store.get<{ calls: number }>('SELECT calls FROM memory_budget')?.calls, 2);
+  } finally { f.close(); }
+});
+test('a partially fitting steering source is truncated before the next source is considered', async () => {
+  let captured: MaintenanceInput | undefined;
+  const f = fixture(async input => { captured = input; return { additions: [], removals: [], conflicts: [] }; });
+  try {
+    f.finish('P'.repeat(3199), Array.from({ length: 5 }, (_, i) => String(i).repeat(3200)), 'R'.repeat(4000));
+    await f.maintenance.tick();
+    assert.ok(captured);
+    assert.deepEqual(captured.tasks[0]?.user.map(text => text.length), [3199, 3200, 3200, 3200, 3200, 1]);
+    assert.equal(captured.tasks[0]?.user.at(-1), '4');
+    assert.equal(captured.tasks[0]?.result, '');
+    assert.ok(f.repo.maintenanceState(f.bot.id).cursor > 0);
+  } finally { f.close(); }
+});
+test('manual Dreaming without source material records completion without charging a provider call', async () => {
+  let calls = 0; const f = fixture(async () => { calls++; throw new Error('No source material should be sent'); });
+  try {
+    const request = randomUUID(); f.maintenance.requestDream(f.bot.id, request); await f.maintenance.tick();
+    assert.equal(calls, 0); assert.equal(f.store.get('SELECT * FROM memory_budget'), undefined);
+    assert.equal(f.maintenance.status(f.bot.id).state, 'succeeded');
+    assert.equal(f.maintenance.status(f.bot.id).provider, 'skipped-no-source');
+    assert.equal(f.maintenance.status(f.bot.id).requested, null);
+    assert.equal(f.repo.hasMaintenanceReceipt(f.bot.id, request), true);
+    const version = f.repo.snapshot(f.bot.id).version;
+    await f.maintenance.tick(); assert.equal(f.repo.snapshot(f.bot.id).version, version);
+  } finally { f.close(); }
+});
+test('suppressed sources advance past the forget barrier even when the provider budget is exhausted', async () => {
+  let calls = 0; const f = fixture(async () => { calls++; throw new Error('Forgotten source must not be inferred'); });
+  try {
+    const saved = f.repo.save(f.bot.id, { requestId: randomUUID(), title: 'Old preference', content: 'Keep short notes.', scope: 'bot', kind: 'preference' });
+    const task = f.finish('Remember: Keep short notes.');
+    f.repo.forget(f.bot.id, saved.id, { requestId: randomUUID(), expectedRevision: saved.entry!.revision });
+    const day = new Date().toISOString().slice(0,10);
+    f.store.db.prepare('INSERT INTO memory_budget VALUES (?,24,160000)').run(day);
+    await f.maintenance.tick();
+    assert.equal(calls, 0); assert.equal(f.maintenance.status(f.bot.id).state, 'succeeded');
+    assert.equal(f.maintenance.status(f.bot.id).provider, 'skipped-no-source');
+    assert.equal(f.repo.maintenanceState(f.bot.id).cursor, f.store.events(f.bot.id, task.id).find(e => e.type === 'task.succeeded')!.seq);
+    assert.equal(f.repo.snapshot(f.bot.id).entries.length, 0);
+    const budget = f.store.get<{ calls: number; characters: number }>('SELECT calls,characters FROM memory_budget WHERE day=?', day)!;
+    assert.equal(budget.calls, 24); assert.equal(budget.characters, 160000);
+    assert.equal(f.store.events(f.bot.id, task.id).find(e => e.type === 'memory.maintained')?.data.providerCalled, false);
+  } finally { f.close(); }
+});
+test('failed provider attempts are charged once and leave the source cursor available for retry', async () => {
+  let calls = 0; const f = fixture(async () => { calls++; throw new Error('Synthetic provider failure'); });
+  try {
+    f.finish('Remember: Keep notes concise.'); await f.maintenance.tick();
+    assert.equal(calls, 1); assert.equal(f.maintenance.status(f.bot.id).state, 'failed');
+    assert.equal(f.repo.maintenanceState(f.bot.id).cursor, 0);
+    const budget = f.store.get<{ calls: number; characters: number }>('SELECT calls,characters FROM memory_budget')!;
+    assert.equal(budget.calls, 1); assert.ok(budget.characters > 0);
+    await f.maintenance.tick(); assert.equal(calls, 1);
+    assert.equal(f.store.get<{ calls: number }>('SELECT calls FROM memory_budget')?.calls, 1);
   } finally { f.close(); }
 });

@@ -3,6 +3,7 @@ import { lstat, realpath, readdir } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { RpcTransport, SandboxBackend, WorkerInput } from '../pi/types.ts';
+import type { DockerCommandRunner } from './persistent-docker.ts';
 import { sharedVerifiedCleanup } from './verified-cleanup.ts';
 
 const execFileAsync = promisify(execFile);
@@ -13,6 +14,8 @@ export interface RootlessDockerOptions {
   model: string;
   apiProtocol?: 'chat-completions'|'responses';
   image?: string;
+  environmentBroker?: boolean;
+  runner?: DockerCommandRunner;
   memoryMb?: number;
   cpus?: number;
   pidsLimit?: number;
@@ -54,11 +57,12 @@ export function buildDockerArgs(input: WorkerInput, options: RootlessDockerOptio
     '--pids-limit', String(pids), '--memory', `${memory}m`, '--memory-swap', `${memory}m`, '--cpus', String(cpus),
     '--user', '0:0', '--workdir', '/workspace',
     '--tmpfs', '/tmp:rw,nosuid,nodev,size=256m,mode=1777',
-    '--mount', `type=bind,source=${safeMountPath(input.workspace)},target=/workspace`,
+    ...(options.environmentBroker?['--tmpfs','/workspace:rw,nosuid,nodev,size=64m,mode=700']:['--mount', `type=bind,source=${safeMountPath(input.workspace)},target=/workspace`]),
     '--mount', `type=bind,source=${safeMountPath(dirname(input.sessionPath))},target=/session`,
     '--mount', `type=bind,source=${safeMountPath(options.gatewayDirectory)},target=/run/chestnut,readonly`,
     '--env', 'HOME=/tmp/home', '--env', 'PI_CODING_AGENT_DIR=/tmp/pi-agent',
     '--env', 'PI_OFFLINE=1', '--env', 'PI_NO_UPDATE_CHECK=1',
+    ...(options.environmentBroker ? ['--env','CHESTNUT_ENVIRONMENT_BROKER=1'] : []),
     '--env', `CHESTNUT_MODEL=${options.model}`, '--env', `CHESTNUT_MODEL_PROTOCOL=${options.apiProtocol??'chat-completions'}`,
     image, `/session/${basename(input.sessionPath)}`,
   ];
@@ -75,22 +79,23 @@ async function verifyDirectory(path: string, expected: string): Promise<void> {
   if (!(await lstat(absolute)).isDirectory()) throw new Error('Sandbox mount must be a directory');
   if (await realpath(absolute) !== absolute) throw new Error('Sandbox mount is not canonical');
 }
-export async function cleanupStaleContainer(input: { runId: string; botId: string; taskId: string }): Promise<void> {
+export async function cleanupStaleContainer(input: { runId: string; botId: string; taskId: string },runner?:DockerCommandRunner): Promise<void> {
+  const command=async(args:string[],timeout=15000)=>runner?runner.command(args,timeout):(await execFileAsync('docker',args,{timeout,maxBuffer:1024*1024})).stdout;
   safeId(input.runId); safeId(input.botId); safeId(input.taskId);
-  const { stdout: info } = await execFileAsync('docker', ['info', '--format', '{{json .}}'], { timeout: 10_000, maxBuffer: 1024 * 1024 });
+  const info = await command(['info', '--format', '{{json .}}'],10000);
   assertRootless(JSON.parse(info));
   const name = `chestnut-${input.runId}`;
-  const list = async (): Promise<string> => (await execFileAsync('docker', ['container', 'ls', '--all', '--filter', `name=^/${name}$`, '--format', '{{.ID}}'], { timeout: 10_000 })).stdout.trim();
+  const list = async (): Promise<string> => (await command(['container', 'ls', '--all', '--filter', `name=^/${name}$`, '--format', '{{.ID}}'],10000)).trim();
   if (!(await list())) return; // Successful daemon query authoritatively confirms absence.
-  const { stdout: raw } = await execFileAsync('docker', ['container', 'inspect', name, '--format', '{{json .Config.Labels}}'], { timeout: 10_000 });
+  const raw = await command(['container', 'inspect', name, '--format', '{{json .Config.Labels}}'],10000);
   const labels = JSON.parse(raw) as Record<string,string>;
   if (labels['chestnut.bot'] !== input.botId || labels['chestnut.task'] !== input.taskId || labels['chestnut.run'] !== input.runId) throw new Error('Refusing to remove a container whose ownership labels do not match');
-  await execFileAsync('docker', ['container', 'rm', '--force', name], { timeout: 15_000, maxBuffer: 1024 * 1024 });
+  await command(['container', 'rm', '--force', name],15000);
   if (await list()) throw new Error('Container still exists after removal; keep bot quarantined');
 }
 /** Exact socket-only mount allowlist; both brokers remain outside the guest. */
-export async function verifyGatewaySockets(directory:string,modelSocket:string,memorySocket?:string){
-  const allowed=new Set([modelSocket,...(memorySocket?[memorySocket]:[])]);
+export async function verifyGatewaySockets(directory:string,modelSocket:string,memorySocket?:string,environmentSocket?:string){
+  const allowed=new Set([modelSocket,...(memorySocket?[memorySocket]:[]),...(environmentSocket?[environmentSocket]:[])]);
   const entries=await readdir(directory);
   if(!entries.includes(modelSocket)||entries.some(entry=>!allowed.has(entry)))throw new Error('Gateway mount may contain only current model and memory sockets');
   for(const entry of entries)if(!(await lstat(join(directory,entry))).isSocket())throw new Error('Trusted gateway socket is not listening');
@@ -109,20 +114,27 @@ export class RootlessDockerBackend implements SandboxBackend {
       if ((await lstat(input.sessionPath)).isSymbolicLink()) throw new Error('Pi session must not be a symlink');
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     await verifyDirectory(this.options.gatewayDirectory, this.options.gatewayDirectory);
-    await verifyGatewaySockets(this.options.gatewayDirectory,'model.sock','memory.sock');
+    await verifyGatewaySockets(this.options.gatewayDirectory,'model.sock','memory.sock',this.options.environmentBroker?'environment.sock':undefined);
     const workspaceRelative = relative(input.workspace, this.options.gatewayDirectory);
     if (!workspaceRelative.startsWith('..') && !isAbsolute(workspaceRelative)) throw new Error('Gateway cannot live inside the sandbox workspace');
+    const runner=this.options.runner;
+    const command=async(args:string[],timeout=15000)=>runner?runner.command(args,timeout):(await execFileAsync('docker',args,{timeout,maxBuffer:1024*1024})).stdout;
     let info: string;
-    try { ({ stdout: info } = await execFileAsync('docker', ['info', '--format', '{{json .}}'], { timeout: 10_000, maxBuffer: 1024 * 1024 })); }
+    try { info=await command(['info', '--format', '{{json .}}'],10000); }
     catch { throw new Error('Rootless Docker unavailable; real mode is disabled, with no host-shell fallback'); }
     const daemonInfo = JSON.parse(info);
     assertRootless(daemonInfo); assertResourceControls(daemonInfo);
     const image = this.options.image ?? `chestnut-pi:${PI_SOURCE_COMMIT.slice(0,12)}`;
-    const { stdout: imageCommit } = await execFileAsync('docker', ['image', 'inspect', image, '--format', '{{index .Config.Labels "org.chestnut.pi.commit"}}'], { timeout: 10_000 });
+    const imageCommit=await command(['image', 'inspect', image, '--format', '{{index .Config.Labels "org.chestnut.pi.commit"}}'],10000);
     if (imageCommit.trim() !== PI_SOURCE_COMMIT) throw new Error('Pi image provenance does not match the pinned source');
     // Creation and start are separate. A late create after recovery can only
     // leave a stopped container, never a running agent.
-    await execFileAsync('docker', buildDockerArgs(input, this.options), { timeout: 30_000, maxBuffer: 1024 * 1024 });
+    await command(buildDockerArgs(input,this.options),30000);
+    if(runner){
+      const attachment=runner.attach(['start','--attach','--interactive',`chestnut-${input.runId}`]);let closed=false;
+      const stop=sharedVerifiedCleanup(async()=>{closed=true;await attachment.terminate();await cleanupStaleContainer(input,runner);});
+      return {write:async(line)=>{if(closed)throw new Error('Task runner closed');await attachment.write(line);},onLine:listener=>attachment.onLine(listener),onClose:listener=>attachment.onClose(listener),stop};
+    }
     const child = spawn('docker', ['start', '--attach', '--interactive', `chestnut-${input.runId}`], { stdio: ['pipe', 'pipe', 'pipe'], shell: false });
     let markReaped: () => void = () => {};
     const reaped = new Promise<void>(resolveReaped => { markReaped = resolveReaped; });

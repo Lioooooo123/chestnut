@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp,rm } from 'node:fs/promises';
+import { mkdtemp,realpath,rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -56,9 +56,11 @@ test('background maintenance learns after settlement and the next task uses the 
 });
 test('real Worker uses ChatGPT Responses credentials only in the outer gateway',async()=>{
   const {AuthManager}=await import('../src/auth.ts');
-  const root=await mkdtemp(join(tmpdir(),'cn-worker-auth-'));const c=config({CHESTNUT_DATA_DIR:root,CHESTNUT_MODE:'pi',CHESTNUT_MEMORY_AUTOMATIC:'0',CHESTNUT_MODEL:'chatgpt-model'});prepareStorage(c);
+  const root=await mkdtemp(join(tmpdir(),'cn-worker-auth-'));const c=config({CHESTNUT_DATA_DIR:root,CHESTNUT_MODE:'pi',CHESTNUT_MEMORY_AUTOMATIC:'0',CHESTNUT_MODEL:'chatgpt-model'});
+  // Keep the real Unix broker within sun_path even when macOS has a long temp base.
+  const brokerRoot=await mkdtemp(join(await realpath('/tmp'),'cn-wa-'));c.gatewayRoot=brokerRoot;prepareStorage(c);
   const auth=new AuthManager(join(root,'control','auth'),{async login(){return {type:'oauth',access:'private-oauth-access',refresh:'private-oauth-refresh',expires:Date.now()+3600000,clientId:'client-id',scopes:['chatgpt.tokens.use.direct']};},async refresh(value){return value;}});
   await auth.startLogin(randomUUID());await auth.wait();const store=new Store(c.dbPath),bot=store.createBot('ChatGPT');let protocol='';let key='';
   const worker=new Worker(store,c,()=>new FakeAdapter({delayMs:20}),{gateway:async options=>{protocol=options.apiProtocol??'';key=await options.getApiKey!(new AbortController().signal);return {async close(){}};}});
-  const running=worker.run();try{const task=store.submit(bot.id,randomUUID(),'Verify the selected model route.');await until(()=>['succeeded','failed','interrupted','cancelled'].includes(store.task(bot.id,task.id).state));assert.equal(store.task(bot.id,task.id).state,'succeeded',store.task(bot.id,task.id).error??'');assert.equal(protocol,'responses');assert.equal(key,'private-oauth-access');assert.ok(!JSON.stringify(store.events(bot.id,task.id)).includes('private-oauth-access'));}finally{await worker.stop();await running;auth.close();store.close();await rm(root,{recursive:true,force:true});}
+  const running=worker.run();try{const task=store.submit(bot.id,randomUUID(),'Verify the selected model route.');await until(()=>['succeeded','failed','interrupted','cancelled'].includes(store.task(bot.id,task.id).state));assert.equal(store.task(bot.id,task.id).state,'succeeded',store.task(bot.id,task.id).error??'');assert.equal(protocol,'responses');assert.equal(key,'private-oauth-access');assert.ok(!JSON.stringify(store.events(bot.id,task.id)).includes('private-oauth-access'));}finally{await worker.stop();await running;auth.close();store.close();await rm(root,{recursive:true,force:true});await rm(brokerRoot,{recursive:true,force:true});}
 });

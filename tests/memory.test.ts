@@ -32,7 +32,9 @@ test('retries do not duplicate memory and a stale correction cannot overwrite a 
   try {
     const input = { requestId: randomUUID(), title: 'Package manager', content: 'Use npm.', scope: 'personal' as const, kind: 'preference' as const };
     const saved = f.repo.save(f.botId, input);
+    assert.notEqual(saved.id, input.requestId);
     assert.equal(f.repo.save(f.botId, input).version, saved.version);
+    assert.equal(new MemoryRepository(f.path).save(f.botId, input).id, saved.id);
     assert.throws(() => f.repo.save(f.botId, { ...input, content: 'Use bun.' }), /different content/);
     const correction = { requestId: randomUUID(), expectedRevision: saved.entry!.revision, title: input.title, content: 'Use bun.' };
     const changed = f.repo.update(f.botId, saved.id, correction);
@@ -40,6 +42,67 @@ test('retries do not duplicate memory and a stale correction cannot overwrite a 
     assert.throws(() => f.repo.update(f.botId, saved.id, { ...correction, requestId: randomUUID(), content: 'Use yarn.' }), /changed/);
     assert.equal(f.repo.snapshot(f.botId).entries[0]?.content, 'Use bun.');
     assert.equal(f.repo.snapshot(f.botId, '', saved.version).entries[0]?.content, 'Use npm.');
+  } finally { f.close(); }
+});
+
+test('create cannot overwrite a user-corrected automatic entry by reusing its ID as a request ID', () => {
+  const f = fixture();
+  try {
+    f.repo.applyMaintenance(f.botId, { requestId: randomUUID(), expectedVersion: f.repo.snapshot(f.botId).version, cursor: 1, dreamAt: 0,
+      additions: [{ title: 'Testing', content: 'Use unit tests.', kind: 'lesson', sourceTaskId: randomUUID() }], removals: [], conflicts: [] });
+    const automatic = f.repo.snapshot(f.botId).entries[0]!;
+    const corrected = f.repo.update(f.botId, automatic.id, { requestId: randomUUID(), expectedRevision: automatic.revision, title: 'Testing', content: 'Use behavior tests before implementation.' });
+    const before = f.repo.snapshot(f.botId);
+    assert.throws(() => f.repo.save(f.botId, { requestId: automatic.id, title: 'Replacement', content: 'Skip testing.', scope: 'personal', kind: 'preference' }, 'agent'), /collides/);
+    assert.deepEqual(f.repo.snapshot(f.botId), before);
+    assert.equal(corrected.entry?.origin, 'user');
+    assert.equal(corrected.entry?.kind, 'lesson');
+    assert.throws(() => f.repo.update(f.botId, automatic.id, { requestId: randomUUID(), expectedRevision: automatic.revision, title: 'Testing', content: 'Stale correction.' }), /changed/);
+    assert.throws(() => f.repo.applyMaintenance(f.botId, { requestId: randomUUID(), expectedVersion: before.version, cursor: 2, dreamAt: 0,
+      additions: [], removals: [{ id: automatic.id, revision: corrected.entry!.revision, reason: 'duplicate' }], conflicts: [] }), /protected/);
+    assert.deepEqual(new MemoryRepository(f.path).snapshot(f.botId), before);
+  } finally { f.close(); }
+});
+
+test('save and update receipts recheck current project permission before returning a later revision', () => {
+  const f = fixture(); const other = randomUUID();
+  const settings = (botId: string, project: string | null) => f.repo.settings(botId, { requestId: randomUUID(), expectedVersion: f.repo.snapshot(botId).version, project, enabled: true });
+  try {
+    settings(f.botId, 'fixture-project'); settings(other, 'fixture-project');
+    const input = { requestId: randomUUID(), title: 'Project tests', content: 'Use unit tests.', scope: 'project' as const, kind: 'decision' as const };
+    const saved = f.repo.save(f.botId, input);
+    const update = { requestId: randomUUID(), expectedRevision: saved.entry!.revision, title: input.title, content: 'Include behavior tests.' };
+    const updated = f.repo.update(f.botId, saved.id, update);
+    settings(f.botId, null);
+    const latest = f.repo.update(other, saved.id, { requestId: randomUUID(), expectedRevision: updated.entry!.revision, title: 'Revised project tests', content: 'Include synthetic repository fixtures.' });
+    const version = latest.version;
+    assert.throws(() => f.repo.save(f.botId, input), /not found in this scope/);
+    assert.throws(() => f.repo.update(f.botId, saved.id, update), /not found in this scope/);
+    assert.throws(() => f.repo.update(f.botId, saved.id, { ...update, requestId: randomUUID(), expectedRevision: latest.entry!.revision }), /not found in this scope/);
+    assert.throws(() => f.repo.forget(f.botId, saved.id, { requestId: randomUUID(), expectedRevision: latest.entry!.revision }), /not found in this scope/);
+    assert.equal(f.repo.snapshot(other).version, version);
+    assert.deepEqual(f.repo.snapshot(other).entries, [latest.entry]);
+    assert.equal(f.repo.snapshot(f.botId, '', saved.version).entries.length, 0);
+    settings(f.botId, 'fixture-project');
+    assert.deepEqual(f.repo.save(f.botId, input).entry, latest.entry);
+    assert.deepEqual(f.repo.update(f.botId, saved.id, update).entry, latest.entry);
+  } finally { f.close(); }
+});
+
+test('forgotten entry receipts remain body-free and retries do not restore a note', () => {
+  const f = fixture();
+  try {
+    const input = { requestId: randomUUID(), title: 'Testing', content: 'Use unit tests.', scope: 'bot' as const, kind: 'lesson' as const };
+    const saved = f.repo.save(f.botId, input);
+    const update = { requestId: randomUUID(), expectedRevision: saved.entry!.revision, title: input.title, content: 'Use behavior tests.' };
+    const updated = f.repo.update(f.botId, saved.id, update);
+    const forget = { requestId: randomUUID(), expectedRevision: updated.entry!.revision };
+    const forgotten = f.repo.forget(f.botId, saved.id, forget);
+    assert.equal(f.repo.save(f.botId, input).entry, undefined);
+    assert.equal(f.repo.update(f.botId, saved.id, update).entry, undefined);
+    assert.deepEqual(f.repo.forget(f.botId, saved.id, forget), { ...forgotten, replayed: true });
+    assert.equal(f.repo.snapshot(f.botId).version, forgotten.version);
+    assert.equal(f.repo.snapshot(f.botId).entries.length, 0);
   } finally { f.close(); }
 });
 

@@ -149,10 +149,13 @@ export class MemoryRepository {
       const state = this.state(this.version());
       if (!state.enabled) throw new AppError(409, 'Memory is turned off');
       const payload = hash(JSON.stringify({ action: 'save', botId, actor, ...input }));
-      const replay = this.replay(state, input.requestId, payload); if (replay) return replay;
+      const replay = this.replay(state, input.requestId, payload, botId); if (replay) return replay;
+      // A create request must never be interpreted as an edit, including for automatic notes
+      // whose IDs have no individual write receipt. Legacy same-payload receipts replay above.
+      if (state.entries[input.requestId]) throw new AppError(409, 'Memory request ID collides with an existing entry');
       const content = line(input.content), title = line(input.title);
       if (actor === 'agent' && Object.values(state.forgotten).includes(fingerprint(content))) throw new AppError(409, 'This content was forgotten. Only an explicit user save can restore it.');
-      const metadata: Metadata = { id: input.requestId, title, scope: input.scope, kind: input.kind,
+      const metadata: Metadata = { id: this.newEntryId(state, input.requestId), title, scope: input.scope, kind: input.kind,
         botId: input.scope === 'bot' ? botId : null, project: input.scope === 'project' ? state.projects[botId] ?? null : null,
         origin: actor, source: input.sourceTaskId ? `chestnut://tasks/${input.sourceTaskId}` : 'user', revision: randomUUID(), createdAt: Date.now(), updatedAt: Date.now() };
       if (input.scope === 'project' && !metadata.project) throw new AppError(400, 'Bind this bot to a project before saving project memory');
@@ -173,7 +176,7 @@ export class MemoryRepository {
       if (!this.clean()) throw new AppError(409, 'Memory has uncommitted changes. Inspect the repository before writing.');
       const state = this.state(this.version()); if (!state.enabled) throw new AppError(409, 'Memory is turned off');
       const payload = hash(JSON.stringify({ action: 'update', botId, id, actor, ...input }));
-      const replay = this.replay(state, input.requestId, payload); if (replay) return replay;
+      const replay = this.replay(state, input.requestId, payload, botId); if (replay) return replay;
       const previous = state.entries[id];
       if (!previous || !this.visible(previous, botId, state.projects[botId] ?? null)) throw new AppError(404, 'Memory not found in this scope');
       if (previous.revision !== input.expectedRevision) throw new AppError(409, 'Memory changed. Read the latest revision before editing.');
@@ -192,7 +195,7 @@ export class MemoryRepository {
       const version = this.version(), state = this.state(version);
       if (!state.enabled) throw new AppError(409, 'Memory is turned off');
       const payload = hash(JSON.stringify({ action: 'forget', botId, id, ...input }));
-      const replay = this.replay(state, input.requestId, payload); if (replay) return { ...replay, forgotten: true };
+      const replay = this.replay(state, input.requestId, payload, botId); if (replay) return { ...replay, forgotten: true };
       const entry = state.entries[id];
       if (!entry || !this.visible(entry, botId, state.projects[botId] ?? null)) throw new AppError(404, 'Memory not found in this scope');
       if (entry.revision !== input.expectedRevision) throw new AppError(409, 'Memory changed. Read the latest revision before forgetting.');
@@ -211,7 +214,7 @@ export class MemoryRepository {
       if (!this.clean()) throw new AppError(409, 'Memory has uncommitted changes. Inspect the repository before writing.');
       const version = this.version(), state = this.state(version);
       const payload = hash(JSON.stringify({ action: 'settings', botId, ...input }));
-      if (this.replay(state, input.requestId, payload)) return;
+      if (this.replay(state, input.requestId, payload, botId)) return;
       if (input.expectedVersion !== version) throw new AppError(409, 'Memory settings changed. Refresh before editing.');
       if (!state.enabled || !input.enabled) state.suppressedBefore = Date.now();
       state.enabled = input.enabled; state.projects[botId] = input.project;
@@ -241,7 +244,7 @@ export class MemoryRepository {
       if (!this.clean()) throw new AppError(409, 'Memory has uncommitted changes');
       const state = this.state(this.version());
       const payload = hash(JSON.stringify({ action: 'dismiss', botId, id, requestId }));
-      if (this.replay(state, requestId, payload)) return;
+      if (this.replay(state, requestId, payload, botId)) return;
       const progress = state.maintenance?.[botId];
       if (!progress?.conflicts.some(c => c.id === id)) throw new AppError(404, 'Conflict not found');
       progress.conflicts = progress.conflicts.filter(c => c.id !== id);
@@ -264,7 +267,7 @@ export class MemoryRepository {
       const version = this.version(), state = this.state(version);
       if (!state.enabled) throw new AppError(409, 'Memory is turned off');
       const payload = hash(JSON.stringify({ botId, ...input }));
-      if (this.replay(state, input.requestId, payload)) return { version, added: 0, removed: 0, replayed: true };
+      if (this.replay(state, input.requestId, payload, botId)) return { version, added: 0, removed: 0, replayed: true };
       if (input.expectedVersion !== version) throw new AppError(409, 'Memory changed during maintenance; retry with the latest version');
       const previous = state.maintenance?.[botId];
       if (input.cursor < (previous?.cursor ?? 0)) throw new AppError(409, 'Maintenance cursor cannot move backwards');
@@ -284,7 +287,9 @@ export class MemoryRepository {
         if (Object.values(state.forgotten).includes(fingerprint(content))) continue;
         if (visible.some(e => fingerprint(e.content) === fingerprint(content)) || additions.some(e => fingerprint(e.content) === fingerprint(content))) continue;
         const now = Date.now();
-        additions.push({ entry: { id: randomUUID(), title: line(addition.title), kind: addition.kind, scope: 'bot', botId, project: null, source: `chestnut://tasks/${addition.sourceTaskId}`, origin: 'automatic', revision: randomUUID(), createdAt: now, updatedAt: now }, content });
+        const id = this.newEntryId(state, input.requestId);
+        if (additions.some(addition => addition.entry.id === id)) throw new AppError(409, 'Memory entry ID collision; retry the request');
+        additions.push({ entry: { id, title: line(addition.title), kind: addition.kind, scope: 'bot', botId, project: null, source: `chestnut://tasks/${addition.sourceTaskId}`, origin: 'automatic', revision: randomUUID(), createdAt: now, updatedAt: now }, content });
       }
       if (Object.keys(state.entries).length + additions.length - deleted.size > 1000) throw new AppError(409, 'Memory entry limit reached');
       const conflicts = [...(previous?.conflicts ?? []), ...input.conflicts.map(c => ({ ...c, title: line(c.title), content: line(c.content), id: randomUUID(), createdAt: Date.now() }))];
@@ -302,10 +307,19 @@ export class MemoryRepository {
   private writeEntry(entry: Metadata, content: string) {
     writeFileSync(join(this.path, 'notes', `${entry.id}.md`), `# ${entry.title}\n\n- ${content} [source: ${entry.source}; added: ${new Date(entry.createdAt).toISOString().slice(0, 10)}]\n`, { mode: 0o600 });
   }
-  private replay(state: MemoryState, requestId: string, payload: string): MemoryChange | undefined {
+  private newEntryId(state: MemoryState, requestId: string): string {
+    const id = randomUUID();
+    if (id === requestId || state.entries[id] || state.forgotten[id] || state.requests[id]) throw new AppError(409, 'Memory entry ID collision; retry the request');
+    return id;
+  }
+  private replay(state: MemoryState, requestId: string, payload: string, botId: string): MemoryChange | undefined {
     const receipt = state.requests[requestId]; if (!receipt) return;
     if (receipt.hash !== payload) throw new AppError(409, 'Memory request ID was already used for different content');
-    const version = this.version(); const metadata = state.entries[receipt.id];
+    // Receipts prove idempotency, not continuing access. Check current permissions before
+    // loading a body, and never resolve settings/maintenance/forget receipt IDs as note IDs.
+    const metadata = receipt.action === 'save' || receipt.action === 'update' ? state.entries[receipt.id] : undefined;
+    if (metadata && !this.visible(metadata, botId, state.projects[botId] ?? null)) throw new AppError(404, 'Memory not found in this scope');
+    const version = this.version();
     return { version, id: receipt.id, ...(metadata ? { entry: this.entry(metadata, version) } : {}), replayed: true };
   }
   private writeState(state: MemoryState) {

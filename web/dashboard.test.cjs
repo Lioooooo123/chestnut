@@ -35,14 +35,24 @@ async function setup() {
   document.hidden = false; document.getElementById = (id) => { assert.ok(elements.has(id), `Missing element ${id}`); return elements.get(id); };
   document.createElement = (tag) => new Node(tag);
   document.querySelectorAll = (selector) => selector === '[data-command]' ? [elements.get('steer-tab'), elements.get('follow-up-tab')] : [];
-  const backend = { auth: {connected:false,preferred:false,model:null,login:null,apiKeyConfigured:false}, authModels:[{id:'account-model',name:'Account model'}], bots: [], tasks: [], events: [], memories: [], maintenance: { job: {state:'succeeded',provider:'explicit-demo',automatic:true}, progress: {cursor:7,lastDreamAt:Date.now(),conflicts:[]} }, memoryVersion: 'a'.repeat(40), memoryEnabled: true, memoryProject: null, status: { mode: 'demo', worker: { online: true }, quarantines: [] }, calls: [], failNextTask: false, failNetwork: false };
+  const backend = { environments: new Map(), schedules: [], fires: [], auth: {connected:false,preferred:false,model:null,login:null,apiKeyConfigured:false}, authModels:[{id:'account-model',name:'Account model'}], bots: [], tasks: [], events: [], memories: [], maintenance: { job: {state:'succeeded',provider:'explicit-demo',automatic:true}, progress: {cursor:7,lastDreamAt:Date.now(),conflicts:[]} }, memoryVersion: 'a'.repeat(40), memoryEnabled: true, memoryProject: null, status: { mode: 'demo', capabilities: {serviceProfile:false,liveVerified:false,network:'none + governed HTTPS fetch',packageInstall:'operator allowlist'}, channels:{telegram:{enabled:false,configured:false,mode:'private-long-poll',botId:null,online:false,status:'disabled',lastSeen:null,lastError:null,deliveries:{}}}, worker: { online: true }, quarantines: [] }, calls: [], failNextTask: false, failNetwork: false };
   const response = (payload, status = 200) => ({ ok: status < 400, status, json: async () => structuredClone(payload) });
   const task = (botId, prompt) => { const result = { id: webcrypto.randomUUID(), botId, prompt, state: 'queued', result: null, error: null, createdAt: Date.now(), updatedAt: Date.now() }; backend.tasks.unshift(result); return result; };
   const fetch = async (url, options = {}) => {
     const pathname = url.split('?')[0]; const method = options.method || 'GET'; const body = options.body ? JSON.parse(options.body) : undefined;
     backend.calls.push({ pathname, url, method, body });
     const authReply=pathname==='/api/auth'&&method==='GET'?structuredClone(backend.auth):null;
-    if (backend.beforeFetch) await backend.beforeFetch({ pathname, method });
+    const environmentMatch = pathname.match(/^\/api\/bots\/([^/]+)\/environment(?:\/(policy|stop))?$/);
+    const scheduleMatch = pathname.match(/^\/api\/bots\/([^/]+)\/schedules(?:\/([^/]+)(?:\/(pause|resume|history))?)?$/);
+    let environmentReply, scheduleReply;
+    if (environmentMatch) {
+      const botId = environmentMatch[1];
+      if (!backend.environments.has(botId)) backend.environments.set(botId, {botId,profile:'service',state:'running',containerName:`chestnut-env-${botId}`,updatedAt:Date.now(),policy:{botId,revision:'none',allowedPackages:[],allowedHosts:[],updatedAt:0},stop:null,verification:'not-live-verified'});
+      environmentReply = structuredClone(backend.environments.get(botId));
+    }
+    if (scheduleMatch && method === 'GET') scheduleReply = scheduleMatch[3] === 'history' ? backend.fires.filter(fire => fire.scheduleId === scheduleMatch[2]) : {schedules:backend.schedules.filter(schedule => schedule.botId === scheduleMatch[1] && schedule.state !== 'deleted'),status:{}};
+    scheduleReply = structuredClone(scheduleReply);
+    if (backend.beforeFetch) await backend.beforeFetch({ pathname, method, signal:options.signal, body });
     if (backend.failNetwork) throw new TypeError('offline');
     if (pathname === '/api/auth' && method === 'GET') return response(authReply);
     if (pathname === '/api/auth' && method === 'DELETE') { backend.auth.connected=false;backend.auth.login=null;return response(backend.auth); }
@@ -53,6 +63,20 @@ async function setup() {
     if (pathname === '/api/status') return response(backend.status);
     if (pathname === '/api/bots' && method === 'GET') return response(backend.bots);
     if (pathname === '/api/bots' && method === 'POST') { const bot = { id: webcrypto.randomUUID(), name: body.name, createdAt: Date.now() }; backend.bots.push(bot); return response(bot); }
+    if (environmentMatch) {
+      const [, botId, action] = environmentMatch, environment = backend.environments.get(botId);
+      if (method === 'GET') { if (backend.failEnvironment) return response({error:'Environment unavailable'},503); return response(environmentReply); }
+      if (action === 'policy') { if (backend.failPolicy || body.expectedRevision !== environment.policy.revision) return response({error:'Environment policy changed; reload before editing'},409); environment.policy = {...body,botId,revision:webcrypto.randomUUID(),updatedAt:Date.now()}; return response(environment.policy); }
+      if (action === 'stop') { if (backend.failStop) return response({error:'Stop not confirmed'},503); environment.stop = {state:'pending',error:null}; return response(environment.stop,202); }
+    }
+    if (scheduleMatch) {
+      const [,botId,id,action] = scheduleMatch;
+      if (method === 'GET') { if (backend.failSchedules) return response({error:'Schedule registry unavailable'},503); return response(scheduleReply); }
+      if (!id) { if (backend.failCreateSchedule) return response({error:'Creation not confirmed'},503); const existing = backend.schedules.find(schedule => schedule.requestId === body.requestId); if(existing)return response(existing); const schedule = {...body,botId,id:webcrypto.randomUUID(),state:'active',nextRunAt:body.runAt||Date.now()+3600000,lastFireAt:null,lastTaskId:null,createdAt:Date.now(),updatedAt:Date.now()}; backend.schedules.push(schedule); return response(schedule,201); }
+      if (backend.failScheduleChange) return response({error:'Schedule change not confirmed'},503);
+      const schedule = backend.schedules.find(schedule => schedule.id === id && schedule.botId === botId); assert.ok(schedule);
+      schedule.state = method === 'DELETE' ? 'deleted' : action === 'pause' ? 'paused' : 'active'; return response(schedule);
+    }
     const memory = pathname.match(/^\/api\/bots\/([^/]+)\/memory(?:\/([^/]+))?$/);
     if (memory) {
       const [, botId, id] = memory;
@@ -259,4 +283,161 @@ test('a stale auth status cannot hide a newer sign-in link',async()=>{
  s.backend.beforeFetch=async({pathname,method})=>{if(pathname==='/api/auth'&&method==='GET'&&first){first=false;waiting=true;await gate;}};
  const old=s.run('refreshAuth()');for(let i=0;i<100&&!waiting;i++)await Promise.resolve();assert.equal(waiting,true);
  await s.el('auth-connect').emit('click');release();await old;await s.flush();assert.equal(s.el('auth-link').hidden,false);
+});
+
+const buttonsIn = (node) => node.querySelectorAll('*').filter(item => item.tag === 'button');
+async function prepareSchedule(s, kind = 'once') {
+  await s.el('schedules-tab').emit('click'); await s.flush();
+  s.el('schedule-name').value = '<script>Weekly review</script>'; s.el('schedule-prompt').value = 'Review progress carefully.';
+  s.el('schedule-kind').value = kind; await s.el('schedule-kind').emit('change');
+  if (kind === 'once') s.el('schedule-run-at').value = new Date(Date.now() + 86_400_000).toISOString().slice(0,16);
+  else { s.el('schedule-cron').value = '0 9 * * 1'; s.el('schedule-time-zone').value = 'Asia/Shanghai'; }
+}
+
+test('environment shows source, honest verification and empty deny-by-default policies', async () => {
+  const s = await setup(); await s.createBot(); s.backend.status.mode = 'pi'; s.backend.status.sandboxProfile = 'service'; s.backend.status.capabilities.serviceProfile = true;
+  await s.run('refresh()'); await s.el('environment-tab').emit('click'); await s.flush();
+  assert.equal(s.el('tasks-view').hidden, true); assert.equal(s.el('environment-view').hidden, false);
+  assert.match(s.el('environment-facts').textContent, /last recorded worker state/);
+  assert.match(s.el('environment-capabilities').textContent, /governed HTTPS fetch/);
+  assert.match(s.el('environment-verification').textContent, /Not live-verified/);
+  assert.match(s.el('mode-description').textContent, /Not live-verified/);
+  assert.equal(s.el('environment-packages').value, ''); assert.equal(s.el('environment-hosts').value, '');
+  assert.match(s.el('environment-policy-version').textContent, /Default deny/);
+  assert.equal(s.backend.calls.some(call => call.pathname.endsWith('/policy') || call.pathname.endsWith('/stop')), false);
+});
+
+test('operator policy edits preserve their original revision across polling and conflicting saves', async () => {
+  const s = await setup(); const bot = await s.createBot(); await s.el('environment-tab').emit('click'); await s.flush();
+  s.el('environment-packages').value = 'curl\ncurl\nca-certificates'; s.el('environment-hosts').value = 'docs.example.com'; await s.el('environment-packages').emit('input');
+  const environment = s.backend.environments.get(bot.id); environment.policy.revision = 'new-server-revision';
+  await s.run('refresh()'); await s.flush(); assert.equal(s.el('environment-packages').value, 'curl\ncurl\nca-certificates');
+  await s.el('environment-policy-form').emit('submit');
+  const call = s.backend.calls.filter(call => call.pathname.endsWith('/policy')).at(-1);
+  assert.equal(call.body.expectedRevision, 'none'); assert.deepEqual(call.body.allowedPackages, ['curl','ca-certificates']);
+  assert.match(s.el('environment-error').textContent, /changed/); assert.match(s.el('environment-packages').value, /curl/);
+  await s.run('refresh()'); await s.flush(); assert.match(s.el('environment-error').textContent, /changed/);
+  await s.el('environment-policy-reload').emit('click'); await s.flush(); assert.equal(s.el('environment-packages').value, '');
+  s.el('environment-packages').value = 'curl'; await s.el('environment-packages').emit('input');
+  await s.el('environment-policy-form').emit('submit'); assert.deepEqual(environment.policy.allowedPackages, ['curl']);
+  assert.equal(s.el('environment-error').hidden, true);
+});
+
+test('environment stop is explicit, deduplicated and pending until worker confirmation', async () => {
+  const s = await setup(); const bot = await s.createBot(); s.backend.status.capabilities.serviceProfile = true; await s.run('refresh()');
+  await s.el('environment-tab').emit('click'); await s.flush();
+  await s.el('environment-stop').emit('click'); assert.equal(s.backend.calls.some(call => call.pathname.endsWith('/stop')), false);
+  await s.el('environment-stop-back').emit('click'); assert.equal(s.el('environment-stop-confirmation').hidden,true);
+  await s.el('environment-stop').emit('click');
+  s.backend.failStop = true; await s.el('environment-stop-confirm').emit('click'); assert.match(s.el('environment-error').textContent, /not confirmed/);
+  s.backend.failStop = false; await Promise.all([s.el('environment-stop-confirm').emit('click'),s.el('environment-stop-confirm').emit('click')]); await s.flush();
+  const stops = s.backend.calls.filter(call => call.pathname.endsWith('/stop')); assert.equal(stops.length,2); assert.equal(stops[0].body.requestId,stops[1].body.requestId);
+  assert.match(s.el('environment-stop-status').textContent,/pending/); assert.match(s.el('environment-facts').textContent,/running/); assert.equal(s.el('environment-stop').disabled,true);
+  s.backend.environments.get(bot.id).state = 'stopped'; s.backend.environments.get(bot.id).stop.state = 'succeeded'; await s.run('loadEnvironment()');
+  assert.match(s.el('environment-stop-status').textContent,/succeeded/); assert.equal(s.el('environment-stop').disabled,true);
+});
+
+test('non-service environments cannot submit stop, and failed loads remain visible', async () => {
+  const s = await setup(); await s.createBot(); await s.el('environment-tab').emit('click'); await s.flush();
+  assert.equal(s.el('environment-stop').disabled,true); await s.el('environment-stop').emit('click'); await s.el('environment-stop-confirm').emit('click');
+  assert.equal(s.backend.calls.some(call => call.pathname.endsWith('/stop')),false);
+  s.backend.failEnvironment = true; await s.el('environment-refresh').emit('click'); assert.match(s.el('environment-error').textContent,/unavailable/); assert.match(s.el('environment-facts').textContent,/running/);
+  s.backend.failEnvironment = false; await s.el('environment-refresh').emit('click'); assert.equal(s.el('environment-error').hidden,true);
+});
+
+test('switching bots aborts stale environment loads and keeps policy drafts scoped', async () => {
+  const s = await setup(); const first = await s.createBot('First'); const second = await s.createBot('Second');
+  s.run(`selectBot(${JSON.stringify(first.id)})`); await s.flush(); await s.el('environment-tab').emit('click'); await s.flush();
+  s.el('environment-packages').value = 'curl'; await s.el('environment-packages').emit('input');
+  let release, signal; const gate = new Promise(resolve => release = resolve);
+  s.backend.beforeFetch = async call => { if(call.pathname === `/api/bots/${first.id}/environment`) { signal = call.signal; await gate; } };
+  const pending = s.run('loadEnvironment()'); await s.flush(); assert.ok(signal);
+  s.run(`selectBot(${JSON.stringify(second.id)})`); await s.flush(); assert.equal(signal.aborted,true); release(); await pending; await s.flush();
+  assert.equal(s.el('environment-packages').value,''); assert.match(s.el('environment-facts').textContent,new RegExp(second.id));
+  s.backend.beforeFetch = null; s.run(`selectBot(${JSON.stringify(first.id)})`); await s.flush(); assert.equal(s.el('environment-packages').value,'curl');
+});
+
+test('leaving environment dismisses stop confirmation and aborts in-flight reads', async () => {
+  const s = await setup(); await s.createBot(); s.backend.status.capabilities.serviceProfile = true; await s.run('refresh()'); await s.el('environment-tab').emit('click'); await s.flush();
+  await s.el('environment-stop').emit('click'); let signal, release; const gate = new Promise(resolve => release = resolve);
+  s.backend.beforeFetch = async call => {if(call.pathname.endsWith('/environment')) {signal=call.signal; await gate;}};
+  const pending=s.run('loadEnvironment()'); await s.flush(); await s.el('tasks-tab').emit('click'); assert.equal(signal.aborted,true); assert.equal(s.el('environment-stop-confirmation').hidden,true);
+  release(); await pending; await s.flush(); assert.equal(s.el('environment-view').hidden,true);
+});
+
+test('schedule creation submits exact UTC once time, prevents duplicates, and retains retry IDs', async () => {
+  const s = await setup(); await s.createBot(); await prepareSchedule(s);
+  const expected = Date.parse(`${s.el('schedule-run-at').value}Z`); s.backend.failCreateSchedule = true;
+  await s.el('schedule-form').emit('submit'); assert.match(s.el('schedule-form-error').textContent,/not confirmed/); assert.equal(s.el('schedule-prompt').value,'Review progress carefully.');
+  s.backend.failCreateSchedule = false; await Promise.all([s.el('schedule-form').emit('submit'),s.el('schedule-form').emit('submit')]); await s.flush();
+  const calls = s.backend.calls.filter(call => call.pathname.endsWith('/schedules') && call.method === 'POST');
+  assert.equal(calls.length,2); assert.equal(calls[0].body.requestId,calls[1].body.requestId); assert.equal(calls[1].body.runAt,expected); assert.equal(calls[1].body.timeZone,'UTC');
+  assert.equal(s.backend.schedules.length,1); assert.equal(s.el('schedule-prompt').value,''); assert.match(s.el('schedule-list').textContent,/<script>Weekly review<\/script>/);
+});
+
+test('cron schedules validate time zones and fields before sending and preserve named zones', async () => {
+  const s = await setup(); await s.createBot(); await prepareSchedule(s,'cron');
+  assert.equal(s.el('schedule-once-fields').hidden,true); s.el('schedule-time-zone').value = 'invalid-zone'; await s.el('schedule-form').emit('submit'); assert.match(s.el('schedule-form-error').textContent,/IANA/);
+  s.el('schedule-time-zone').value = 'Asia/Shanghai'; s.el('schedule-cron').value = '* *'; await s.el('schedule-form').emit('submit'); assert.match(s.el('schedule-form-error').textContent,/five cron/);
+  assert.equal(s.backend.schedules.length,0); s.el('schedule-cron').value = '0  9 * * 1'; await s.el('schedule-form').emit('submit');
+  assert.equal(s.backend.schedules[0].cron,'0 9 * * 1'); assert.equal(s.backend.schedules[0].timeZone,'Asia/Shanghai'); assert.equal(s.backend.schedules[0].kind,'cron');
+});
+
+test('one-time schedules reject past or impossible UTC dates without dispatch', async () => {
+  const s = await setup(); await s.createBot(); await prepareSchedule(s);
+  for(const value of ['2020-01-01T10:00','2030-02-30T10:00','not-a-date']) {s.el('schedule-run-at').value=value;await s.el('schedule-form').emit('submit');assert.match(s.el('schedule-form-error').textContent,/future date/);}
+  assert.equal(s.backend.schedules.length,0);
+});
+
+test('schedule pause/resume and two-step delete preserve queued tasks and durable history', async () => {
+  const s = await setup(); await s.createBot(); const task = await s.submit(); await prepareSchedule(s); await s.el('schedule-form').emit('submit');
+  const schedule = s.backend.schedules[0]; schedule.lastFireAt=Date.now();schedule.lastTaskId=task.id;
+  s.backend.fires.push({scheduleId:schedule.id,taskId:task.id,scheduledAt:Date.now(),observedAt:Date.now(),outcome:'queued',coalesced:true});
+  await buttonsIn(s.el('schedule-list')).find(button => button.textContent==='Pause').emit('click'); assert.equal(schedule.state,'paused');
+  await buttonsIn(s.el('schedule-list')).find(button => button.textContent==='Resume').emit('click'); assert.equal(schedule.state,'active');
+  await buttonsIn(s.el('schedule-list')).find(button => button.textContent==='Run history').emit('click'); await s.flush();
+  assert.match(s.el('schedule-history-list').textContent,/Task queued/); assert.match(s.el('schedule-history-list').textContent,/coalesced/); assert.doesNotMatch(s.el('schedule-history-list').textContent,/Completed/);
+  await buttonsIn(s.el('schedule-list')).find(button => button.textContent==='Delete').emit('click'); assert.equal(schedule.state,'active');
+  await buttonsIn(s.el('schedule-list')).find(button => button.textContent==='Keep schedule').emit('click'); assert.equal(schedule.state,'active');
+  await buttonsIn(s.el('schedule-list')).find(button => button.textContent==='Delete').emit('click');
+  await buttonsIn(s.el('schedule-list')).find(button => button.textContent==='Confirm delete').emit('click'); assert.equal(schedule.state,'deleted'); assert.equal(s.backend.tasks.length,1); assert.equal(s.backend.fires.length,1);
+});
+
+test('schedule read and mutation failures retain the list and show recoverable errors', async () => {
+  const s = await setup(); await s.createBot(); await prepareSchedule(s); await s.el('schedule-form').emit('submit');
+  s.backend.failSchedules = true; await s.el('schedules-refresh').emit('click'); assert.match(s.el('schedules-error').textContent,/unavailable/); assert.match(s.el('schedule-list').textContent,/Weekly review/);
+  s.backend.failSchedules = false; await s.el('schedules-refresh').emit('click'); s.backend.failScheduleChange=true;
+  await buttonsIn(s.el('schedule-list')).find(button=>button.textContent==='Pause').emit('click'); assert.match(s.el('schedules-error').textContent,/not confirmed/); assert.equal(s.backend.schedules[0].state,'active');
+});
+
+test('schedule history Close and bot navigation fence stale reads and retain separate drafts', async () => {
+  const s = await setup(); const first=await s.createBot('First'); await prepareSchedule(s); await s.el('schedule-form').emit('submit'); const schedule=s.backend.schedules[0];
+  let release,signal;const gate=new Promise(resolve=>release=resolve);s.backend.beforeFetch=async call=>{if(call.pathname.endsWith('/history')){signal=call.signal;await gate;}};
+  const pending=s.run(`showScheduleHistory(${JSON.stringify(schedule.id)})`);await s.flush();await s.el('schedule-history-close').emit('click');assert.equal(signal.aborted,true);release();await pending;assert.equal(s.el('schedule-history-panel').hidden,true);
+  s.backend.beforeFetch=null;s.el('schedule-prompt').value='Draft for first';await s.el('schedule-prompt').emit('input');const second=await s.createBot('Second');await s.flush();assert.equal(s.el('schedule-prompt').value,'');
+  let releaseList,listSignal;const listGate=new Promise(resolve=>releaseList=resolve);s.backend.beforeFetch=async call=>{if(call.pathname===`/api/bots/${second.id}/schedules`){listSignal=call.signal;await listGate;}};
+  const old=s.run('loadSchedules()');await s.flush();s.run(`selectBot(${JSON.stringify(first.id)})`);await s.flush();assert.equal(listSignal.aborted,true);releaseList();await old;await s.flush();
+  assert.equal(s.el('schedule-prompt').value,'Draft for first');assert.match(s.el('schedule-list').textContent,/Weekly review/);
+});
+
+test('Telegram readiness is read-only, token-free and separates configuration from delivery', async () => {
+  const s = await setup(); const bot=await s.createBot();s.backend.status.channels.telegram={enabled:true,configured:true,mode:'private-long-poll',botId:bot.id,online:false,status:'not-started',lastSeen:null,lastError:null,deliveries:{uncertain:2},token:'must-not-render'};
+  await s.run('refresh()');assert.match(s.el('telegram-status').textContent,/not-started/);assert.match(s.el('telegram-facts').textContent,/uncertain: 2/);assert.doesNotMatch(s.el('telegram-facts').textContent,/must-not-render/);
+  s.backend.status.channels.telegram.online=true;await s.run('refresh()');assert.match(s.el('telegram-status').textContent,/does not prove delivery/);
+  assert.equal(s.backend.calls.some(call=>call.pathname.includes('/telegram')&&call.method!=='GET'),false);
+});
+
+test('an ambiguous one-time create can retry the same request after its due time passes', async () => {
+  const s=await setup();await s.createBot();await prepareSchedule(s);s.backend.failCreateSchedule=true;await s.el('schedule-form').emit('submit');
+  const first=s.backend.calls.filter(call=>call.pathname.endsWith('/schedules')&&call.method==='POST').at(-1);
+  // Model a server commit whose response was lost, then advance only this VM clock.
+  s.backend.schedules.push({...first.body,botId:s.backend.bots[0].id,id:webcrypto.randomUUID(),state:'completed',nextRunAt:null,lastFireAt:first.body.runAt,lastTaskId:null});
+  s.backend.failCreateSchedule=false;s.run(`Date.now = () => ${first.body.runAt+60_000}`);await s.el('schedule-form').emit('submit');
+  const calls=s.backend.calls.filter(call=>call.pathname.endsWith('/schedules')&&call.method==='POST');assert.equal(calls.length,2);assert.equal(calls[0].body.requestId,calls[1].body.requestId);assert.equal(s.backend.schedules.length,1);assert.equal(s.el('schedule-form-error').hidden,true);
+});
+
+test('unchanged schedule polling retains action nodes and keyboard focus targets', async () => {
+  const s=await setup();await s.createBot();await prepareSchedule(s);await s.el('schedule-form').emit('submit');
+  const button=buttonsIn(s.el('schedule-list')).find(item=>item.textContent==='Pause');await s.run('refresh()');await s.flush();
+  assert.equal(buttonsIn(s.el('schedule-list')).find(item=>item.textContent==='Pause'),button);
 });

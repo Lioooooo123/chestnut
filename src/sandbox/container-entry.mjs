@@ -28,17 +28,22 @@ await mkdir('/tmp/pi-agent', { recursive: true, mode: 0o700 });
 await mkdir('/tmp/home', { recursive: true, mode: 0o700 });
 await writeFile('/tmp/pi-agent/models.json', JSON.stringify({ providers: { chestnut: {
   baseUrl: 'http://127.0.0.1:4011/v1', api: protocol==='responses'?'openai-responses':'openai-completions', apiKey: 'chestnut-local-no-secret',
-  models: [{ id: model, name: model, reasoning: false, input: ['text'], contextWindow: 128000, maxTokens: 8192,
+  models: [{ id: model, name: model, reasoning: protocol==='responses', input: ['text'], contextWindow: 128000, maxTokens: 8192,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, compat: { supportsDeveloperRole: false, supportsStore: false } }],
 } } }), { mode: 0o600 });
 const memorySocket = '/run/chestnut/memory.sock';
 const memoryArgs = existsSync(memorySocket) ? ['--extension', '/opt/chestnut/memory-extension.mjs'] : [];
+const environmentSocket = '/run/chestnut/environment.sock';
+const environmentEnabled = process.env.CHESTNUT_ENVIRONMENT_BROKER === '1';
+if (environmentEnabled && !existsSync(environmentSocket)) throw new Error('Environment broker socket missing');
+const environmentTools = ['environment_bash','environment_read','environment_write','environment_edit','environment_packages','environment_fetch',...(memoryArgs.length ? ['memory_search','memory_read','memory_save','memory_update','memory_forget'] : [])];
+const environmentArgs = environmentEnabled ? ['--no-tools', '--tools', environmentTools.join(','), '--extension', '/opt/chestnut/environment-extension.mjs'] : [];
 const child = spawn('node', [
   '/opt/pi/packages/coding-agent/dist/bundle/rpc-entry.js', '--provider', 'chestnut', '--model', model,
   '--session', sessionPath, '--session-dir', '/session',
   '--no-extensions', '--no-mcp', '--no-skills', '--no-prompt-templates', '--no-themes', '--no-context-files', '--no-approve',
-  ...memoryArgs,
-], { stdio: 'inherit', shell: false, env: { ...process.env, CHESTNUT_MEMORY_SOCKET: memoryArgs.length ? memorySocket : undefined } });
+  ...memoryArgs, ...environmentArgs,
+], { stdio: 'inherit', shell: false, env: { ...process.env, CHESTNUT_MEMORY_SOCKET: memoryArgs.length ? memorySocket : undefined, CHESTNUT_ENVIRONMENT_SOCKET: environmentEnabled ? environmentSocket : undefined } });
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => child.kill(signal));
 child.on('error', () => { relay.close(); process.exitCode = 1; });
 child.on('exit', code => { relay.close(); process.exitCode = code ?? 1; });
