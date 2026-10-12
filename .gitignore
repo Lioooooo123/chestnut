@@ -1,0 +1,9 @@
+node_modules/
+.env
+.chestnut/
+coverage/
+*.log
+vendor/pi/node_modules/
+vendor/pi/.artifacts/
+vendor/pi/**/dist/
+vendor/pi/packages/ai/src/providers/data/

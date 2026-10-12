@@ -1,0 +1,62 @@
+# Verification report
+
+Date: 2026-10-12. The cloud build below used Node v24.19.0. The macOS closeout used Node v26.5.0 and npm 11.17.0; its results and changes are recorded separately.
+
+## macOS closeout
+
+- Downloaded archive SHA-256 matched `eb1c10f62d516d3c87c9d999c1278410d9c68ceaf62c3a6ca1cd300d5e6c9a69`. Archive members were checked for absolute paths, traversal and unsafe link/device entries before extraction into a new directory.
+- Installed both locked dependency trees with lifecycle scripts disabled. Upstream npm reported its existing `autoevals` package-manager engine warning and deprecation notices; no dependency versions or lockfiles were changed.
+- `npm run check`: 101 tests, 91 passed, 0 failed, 10 explicitly skipped Linux OS-lock tests. macOS has no util-linux flock or Linux `/proc/self/fd`; these tests remain enabled on Linux. No live Linux lock verification is claimed.
+- Real private Unix-socket creation, mode checks and idempotent cleanup passed on this Mac outside the execution sandbox. Container socket mounts and relay interoperability remain untested.
+- `npm run build` strict TypeScript check and `npm run demo` succeeded. The separate Worker/SQLite demo completed a task, steering receipt and queued follow-up without model calls, tools or Docker.
+- Reverified all 2,029 pinned upstream file hashes and retained MIT LICENSE, immutable model catalog, and 14 local Pi workspace links. The 18 selected coding-agent tests plus 4 selected agent-loop tests passed; 34 unrelated agent-loop tests were excluded by the selection. Full upstream `build:offline` and compiled RPC get_state/startup/shutdown smoke passed without model calls.
+- Safari desktop check used a loopback-only demo and sample data: empty state, Worker connectivity, create Bot, submit task, running state and final result were inspected. This is a basic desktop check, not a mobile/cross-browser audit or live AI acceptance.
+- Source screening found no runtime databases, credential files or high-confidence private-key/token patterns in the archive. Runtime demo data is outside the Git repository. This is a scoped screening, not a guarantee that every possible secret format is detectable.
+- Used only the existing `Lioooooo123` GitHub authentication; repository write access was confirmed and the repository refs were empty before initial publication. No VPS access, deployment, new credentials, host software installation or Docker security changes were performed.
+- No root `.github/workflows` are included. The initial commit uses `[skip ci]`; remote refs, committed tree and Actions history are checked after push.
+
+### Changes from the supplied archive
+
+- `scripts/test.mjs` and the root test script select a canonical system temporary base before test fixtures are created. macOS `/var` and `/tmp` aliases no longer cause fixture failures; production symlink checks remain intact.
+- `scripts/demo.mjs` resolves its own newly created temporary directory before configuring storage.
+- `tests/environment-lock.test.ts` explicitly skips its Linux-only tests on other platforms; no fake flock implementation was substituted.
+- `tests/persistent-worker.test.ts` places its fully mocked gateway directory under its canonical fixture root. It exercises Worker transitions without claiming Linux transport coverage.
+- README, this report and the dashboard verification note reflect the actual client implementation and local results. Upstream Pi source, dependency pins and production security policy were not changed.
+
+## Earlier cloud verification
+
+## Passed
+
+- Root package dependency installation with scripts disabled and lockfile retained.
+- TypeScript strict no-emit build for application and tests.
+- Complete pinned upstream source: all 2,029 source-file hashes and MIT license retained.
+- Immutable upstream model catalog hash verified and official hydration/check completed. The mutable live models.dev request returned proxy 403; it was not bypassed. The documented immutable catalog was used instead.
+- Full upstream `npm run build:offline`, producing the actual Pi RPC bundle.
+- Local dependency check: 14 Pi workspace links, zero registry replacements for Pi packages.
+- Actual Pi source tests: 18 coding-agent session/RPC regressions plus 4 selected agent-loop tool batch/parallel execution tests passed. Other upstream tests were not part of this focused source-contract run.
+- Actual compiled RPC readiness/get_state smoke with no prompt, tools disabled, sanitized environment and no model key. This proves bundle startup/readiness only, not model inference or sandbox isolation.
+- Chestnut aggregate suite: see final count below. Includes actual Node HTTP parser over in-memory streams, SQLite WAL, separate adapter unit tests, state/worker tests and dependency-free dashboard-controller tests.
+- Experimental persistent backend: socket-free Docker lifecycle mocks cover stable writable-root identity, exact reuse policy, cancellation admission, filesystem-preserving stop, missing/replaced identity, resource refusal, stale ownership and cleanup failure. These are not actual rootfs/process tests.
+- Host OS-lock runner: 10 real subprocess/flock tests with a local fake Docker fixture cover owner SIGKILL, delayed commands, attachment reaping, holder SIGKILL, poison and durable takeover quarantine. These do not certify real daemon-side operations. A rapid-contention listener-order race was found during repeated aggregate verification and fixed; 12 consecutive focused runs (1,536 contender acquisitions) subsequently passed.
+- Persistent Worker tests cover pretransport cleanup, immutable identity, unknown mutable-startup outcome and verified whole-bot stop before model capability publication.
+- `npm run demo`: separate real Worker process and SQLite file completed initial task, steering receipt and queued follow-up in model-less mode. No HTTP listener, browser, model call or agent shell was used.
+
+## Final aggregate
+
+Run `npm run check` to reproduce. The test suite explicitly identifies a Unix-listener integration skip when the host denies binding. Vendored-source import tests also explain how to install upstream dependencies if they are absent in a fresh extraction.
+
+Final aggregate: 101 tests, 100 passed, 0 failed, 1 explicitly skipped Unix-socket integration test. Test output is not a claim that the unexecuted stages below passed.
+
+## Not run / blocked
+
+- Real Unix-socket listener permissions, gateway relay↔container transport and socket mount interoperability: this executor returns `listen EPERM`, including an approved elevated retry. One Unix integration test is explicitly skipped. HTTP behavior was tested with paired in-memory streams; no alternate network route was used to evade the restriction.
+- Live API listener and browser-to-API flow: not accepted as verified in this executor. API parser/handler tests are socket-free.
+- Real desktop/mobile browser rendering and visual review: Chromium could not create a process socket; no visual pass is claimed. Dashboard logic has a separate mocked-DOM controller suite.
+- Rootless Docker image build, rootless container launch, live seccomp/mount/namespace/resource isolation, Docker process-kill/removal behavior and image model relay: neither Docker nor Podman is installed. Argv/policy/cleanup coordination tests are not a live isolation test.
+- Live OpenAI inference: no model credential supplied, no paid model call made.
+- Writable persistent OS lifecycle is implemented experimentally but not live-verified. Continuous background services, arbitrary online software installation, per-task Git worktrees, quota storage and general outbound Internet remain unimplemented. Every persistent task currently stops the whole Bot, retaining its files but interrupting services.
+- At the earlier cloud-build stage, remote push, PR, deployment or publication was not attempted. GitHub push was subsequently authorized for the macOS closeout; VPS deployment remains outside this task.
+
+## Before a real deployment
+
+Use a dedicated Linux account, util-linux flock, cgroup v2/systemd with delegated resource controllers, private short data directory and quota-backed storage for both Docker writable layers and workspace data. Install Rootless Docker, build the pinned image, configure the outer worker model credential, then run a disposable task through the UI. Verify (1) API remains loopback-only, (2) model gateway works with network none, (3) bot paths cannot cross, (4) cancellation removes ephemeral run containers or stops persistent Bot containers without deleting their rootfs, (5) SIGKILL/restart interrupts without replay and quarantine cleanup precedes another task, and (6) disk and model budgets meet your requirements. These are explicit deployment acceptance checks, not already-completed validations.

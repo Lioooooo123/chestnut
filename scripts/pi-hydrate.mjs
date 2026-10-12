@@ -1,0 +1,11 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { hydrateModelCatalog } from '../vendor/pi/packages/ai/scripts/hydrate-model-catalog.ts';
+const root = fileURLToPath(new URL('../', import.meta.url));
+const pin = JSON.parse(readFileSync(join(root,'vendor/pi/nix/model-catalog.json'),'utf8'));
+const catalog = join(root,'vendor/pi-model-catalog.json');
+if (`sha256-${createHash('sha256').update(readFileSync(catalog)).digest('hex')}` !== pin.revision) throw new Error('Pi model catalog does not match source pin');
+hydrateModelCatalog(join(root,'vendor/pi/packages/ai'), catalog);
+console.log(`Hydrated official model catalog ${pin.revision}`);

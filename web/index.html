@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f5f5f0">
+  <meta name="description" content="Chestnut, a quiet home for your personal bots and their work.">
+  <title>Chestnut · Your bot workspace</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%233c5c43'/%3E%3Cpath d='M32 12C27 23 15 23 15 38a17 17 0 0034 0c0-15-12-15-17-26z' fill='%23e9bb85'/%3E%3Cpath d='M17 44h30a17 17 0 01-30 0z' fill='%23fff0d8'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="./" aria-label="Chestnut home"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M20 5C16 14 7 14 7 25a13 13 0 0026 0C33 14 24 14 20 5Z" fill="currentColor"/><path d="M8 28h24a13 13 0 01-24 0Z" fill="#f4e3c8"/></svg></span><span>chestnut<span class="brand-sub">A little space to do more.</span></span></a>
+      <div class="workspace-label"><span class="workspace-avatar">P</span><span>Personal workspace<small>Make room for your ideas</small></span><span class="private-icon" aria-label="Personal workspace">⌂</span></div>
+      <div class="sidebar-heading"><span>YOUR BOTS</span><span id="bot-count" class="count">0</span></div>
+      <nav id="bot-list" class="bot-list" aria-label="Your bots"><div class="list-loading">Connecting to your workspace…</div></nav>
+      <button id="new-bot" class="new-bot"><span aria-hidden="true">＋</span> Create a bot</button>
+      <div class="sidebar-footer"><div class="worker-heading"><span id="worker-dot" class="status-dot"></span><span id="worker-label">Checking worker</span></div><p id="worker-description">Waiting for a status update.</p><div class="version">CHESTNUT <span>FIRST EDITION · v0.1</span></div></div>
+    </aside>
+    <main class="main">
+      <header class="topbar"><span class="breadcrumb">Workspace <span>/</span> <strong id="breadcrumb-bot">Overview</strong></span><div id="connection-status" class="connection-status" role="status"><span class="status-dot"></span><span>Connecting</span></div></header>
+      <div class="workspace-content">
+        <div id="mode-banner" class="mode-banner checking" role="status"><span class="banner-icon" aria-hidden="true">◌</span><span id="mode-description">Connecting to your local workspace…</span></div>
+        <div id="quarantine-banner" class="error-banner quarantine-banner" role="alert" hidden><span id="quarantine-description"></span></div>
+        <div id="connection-error" class="error-banner" hidden><span id="connection-error-text"></span><button id="retry-connection" class="text-button">Try again</button></div>
+        <section class="workspace-heading"><div><div class="eyebrow">YOUR PERSONAL BOT STUDIO</div><h1 id="workspace-title">Good work starts here.</h1><p id="workspace-subtitle">A home for your bots, their tasks, and the ideas in between.</p></div><span id="bot-mark" class="bot-mark" aria-hidden="true">✳</span></section>
+        <section id="onboarding" class="onboarding" hidden><div class="empty-illustration" aria-hidden="true"><span>✳</span><i></i><i></i></div><div class="eyebrow">ONE SMALL START</div><h2>Meet your first bot.</h2><p>Give it a name, then give it something to work on.<br>Each bot keeps its own task history.</p><button id="first-bot" class="button button-primary">Create your first bot <span aria-hidden="true">↗</span></button><div class="onboarding-note">Simple by design. Yours to grow.</div></section>
+        <div id="bot-workspace" hidden>
+          <form id="task-form" class="composer"><label for="task-prompt" class="composer-label"><span class="spark" aria-hidden="true">✦</span> What should we work on?</label><textarea id="task-prompt" name="prompt" rows="3" maxlength="20000" placeholder="Describe a task, share an idea, or pick up where you left off…" required></textarea><div class="composer-bottom"><span id="composer-hint">One task at a time in this workspace.</span><button id="submit-task" class="button button-primary" type="submit">Start task <span aria-hidden="true">↗</span></button></div><p id="task-form-error" class="form-error" role="alert" hidden></p></form>
+          <div class="work-grid"><section class="tasks-panel"><div class="section-heading"><h2>Task history <span id="task-count" class="count">0</span></h2><span id="task-summary" class="section-meta">All tasks</span></div><div id="task-list" class="task-list" aria-label="Task history"></div></section>
+            <section id="task-detail" class="detail-panel" aria-label="Selected task"><div id="detail-empty" class="detail-empty"><span class="detail-empty-icon" aria-hidden="true">☷</span><h3>A little clarity, every step.</h3><p>Select a task to see its progress,<br>send a nudge, or read the result.</p></div><div id="detail-content" hidden><div class="detail-top"><span id="detail-state" class="state-pill"></span><span id="detail-date" class="section-meta"></span></div><h2 id="detail-prompt" class="detail-prompt"></h2><div class="task-id-row"><span id="detail-id"></span><button id="copy-task-id" class="text-button" type="button">Copy ID</button></div><div id="task-state-note" class="state-note" hidden></div><section id="result-section" class="result-section" hidden><h3 id="result-label">Result</h3><pre id="task-result"></pre></section><div class="activity-heading"><h3>Activity</h3><span id="event-count" class="section-meta">0 events</span></div><div id="event-log" class="event-log" aria-label="Task activity"></div><p id="event-error" class="form-error" role="status" hidden></p><form id="command-form" class="command-form"><div class="command-tabs" role="group" aria-label="Message type"><button id="steer-tab" type="button" class="command-tab" data-command="steer" aria-pressed="false">Steer this task</button><button id="follow-up-tab" type="button" class="command-tab active" data-command="follow_up" aria-pressed="true">New follow-up</button></div><label id="command-help" for="command-text">Queue a new task for this bot.</label><textarea id="command-text" rows="2" maxlength="20000" placeholder="What would you like to do next?"></textarea><div class="command-actions"><button id="cancel-task" type="button" class="button button-danger">Cancel task</button><button id="submit-command" type="submit" class="button button-small">Queue follow-up <span aria-hidden="true">↗</span></button></div><p id="command-error" class="form-error" role="alert" hidden></p></form></div></section>
+          </div>
+        </div>
+        <footer class="main-footer"><span>Small steps. Thoughtful work.</span><span>Built for your own corner of the internet.</span></footer>
+      </div>
+    </main>
+  </div>
+  <dialog id="bot-dialog" class="bot-dialog" aria-labelledby="bot-dialog-title"><form id="bot-form"><button id="close-dialog" class="dialog-close" type="button" aria-label="Close">×</button><div class="dialog-mark" aria-hidden="true">✳</div><div class="eyebrow">A NEW COLLABORATOR</div><h2 id="bot-dialog-title">Give your bot a name.</h2><p>A name that feels right for the work you have in mind.</p><label for="bot-name">Bot name</label><input id="bot-name" name="name" autocomplete="off" maxlength="80" placeholder="e.g. Research companion" required><p id="bot-form-error" class="form-error" role="alert" hidden></p><button id="create-bot-submit" class="button button-primary" type="submit">Create bot <span aria-hidden="true">↗</span></button></form></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <noscript><div class="noscript">Chestnut needs JavaScript to connect to your bot workspace.</div></noscript>
+</body>
+</html>

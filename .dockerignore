@@ -1,0 +1,12 @@
+**/node_modules
+**/.git
+**/.env
+**/.env.*
+!**/.env.example
+.chestnut
+**/.chestnut
+**/dist
+**/.artifacts
+**/*.log
+**/coverage
+*.tar.gz

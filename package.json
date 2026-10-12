@@ -1,0 +1,27 @@
+{
+  "name": "chestnut",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env src/cli.ts dev",
+    "api": "node --env-file-if-exists=.env src/cli.ts api",
+    "worker": "node --env-file-if-exists=.env src/cli.ts worker",
+    "doctor": "node --env-file-if-exists=.env src/cli.ts doctor",
+    "test": "node scripts/test.mjs",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit",
+    "check": "npm run typecheck && npm test",
+    "pi:verify": "node scripts/pi-verify-source.mjs && node scripts/pi-check-resolutions.mjs",
+    "pi:contracts": "bash scripts/pi-contract.sh",
+    "pi:build": "bash scripts/pi-build.sh",
+    "demo": "node scripts/demo.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
