@@ -1,5 +1,15 @@
 # Verification report
 
+## Offline deployment preparation after 864cd37
+
+The remote baseline was rechecked unchanged at `864cd37cbe0ef883398bd3a21c5aa142a3eedc9f`; existing user commits and the earlier checkout were preserved. Added a read-only host preflight, a guarded reusable offline acceptance entry, an opt-in model-less Linux/Docker entry and [startup/recovery runbook](deployment-runbook.md). Default Docker entry prints a plan without contacting Docker; execution refuses existing data, remote daemon routes and unsuitable rootless/resource/image prerequisites. It freezes the inspected immutable image, scopes cleanup to its own new Bot identities, retains rootfs/evidence and treats uncertain cleanup as failure.
+
+On this Mac, the guarded offline entry passed source/link checks, the full application suite and the model-less Worker demo. The final full check reported **305 tests: 295 passed, 0 failed, 10 explicit Linux OS-lock skips**. Four new deployment tests cover read-only behavior, preservation of existing data, canonical/private path admission, local daemon/provenance checks with a synthetic transport and no-execute defaults. These are not a live Docker result. Pi source and dependency pins were unchanged; no repeated upstream build was needed.
+
+Safari rendered the actual dashboard assets against read-only loopback sample data in 390px and 320px frames. Environment facts, long warnings, single-column management cards, schedule fields and times were inspected. WebKit's small native select was corrected to a 44px styled native select; the larger control and native popup were verified after reload. Mobile management buttons also have 44px minimum touch height. No policy, schedule, model or Telegram mutation was sent through the preview. This is phone-width WebKit inspection, not an actual iPhone/Android, soft-keyboard or full accessibility pass.
+
+The real Docker entry was **not executed**: Linux/rootless Docker acceptance, measured quotas, real Worker/Docker crash recovery, signed online packages, model inference and Telegram still require the new authorized VPS and appropriate explicit grants. No old VPS/Tailscale connection, host installation, public exposure, new credentials or security settings change was made. Publication uses a normal fast-forward with `[skip ci]`, preserving the existing workflow.
+
 ## Latest macOS Memoh-inspired milestone acceptance (2026-10-12 UTC)
 
 Baseline `4abf16f4c6a75eb03f248e4d427b08b455fb9ec4` was fetched into an isolated worktree; the earlier local checkout and user commits were preserved. The Library patch's original SHA-256 was verified, then the two supplied version-1 corrections were applied without overlapping the full patch.

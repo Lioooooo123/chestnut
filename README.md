@@ -31,6 +31,8 @@ Dashboard 支持创建/选择 Bot、任务提交、历史与结果、进度事�
 
 `npm run api` 和 `npm run worker` 可以分别启动；`npm run doctor` 检查 SQLite、Rootless Docker 和模型配置。`npm run build` 是 TypeScript 校验，Node 24 直接执行可擦除类型的 TS，不需要应用转译产物。
 
+部署准备先看 [启动与失败恢复指引](docs/deployment-runbook.md)：`npm run preflight -- --offline` 是不初始化状态的只读检查；`npm run acceptance:offline` 复用完整离线测试；`npm run acceptance:docker` 默认只列计划，必须明确加 `--execute --data-dir <新的独立目录>` 才运行 Linux/Docker 验收子集。它们不会安装系统软件、开放公网或自动使用模型/Telegram。`doctor` 会初始化数据目录，不应当作只读预检。
+
 ## 真实 Pi 模式
 
 在你自己的 Linux 主机上完成以下步骤。真实容器构建、模型调用和容器网关联调尚未执行；本机无模型 API 与浏览器检查不能代替这些验收。
