@@ -40,6 +40,7 @@ export interface PersistentDockerOptions extends PersistentCleanupOptions {
   canStart: () => boolean;
   gatewaySocketName: string;
   model: string;
+  apiProtocol?: 'chat-completions'|'responses';
   networkPolicy?: PersistentNetworkPolicy;
   runner?: DockerCommandRunner;
   /** Explicit unit-test dependency seam. Production defaults to native filesystem checks. */
@@ -191,7 +192,7 @@ export class PersistentDockerBackend implements SandboxBackend {
     await canonicalDirectory(input.workspace,fs);await canonicalDirectory(o.gatewayDirectory,fs);startFence(o);
     if (o.gatewayDirectory===input.workspace || o.gatewayDirectory.startsWith(input.workspace+sep) || input.workspace.startsWith(o.gatewayDirectory+sep)) throw new Error('Persistent gateway and workspace mounts must be separate');
     for (const entry of await fs.readdir(o.gatewayDirectory)) {
-      if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}\.sock$/.test(entry) || !(await fs.lstat(join(o.gatewayDirectory,entry))).isSocket()) throw new Error('Persistent gateway mount may contain only per-run model sockets');
+      if (![o.gatewaySocketName, `${input.runId}.memory.sock`].includes(entry) || !(await fs.lstat(join(o.gatewayDirectory,entry))).isSocket()) throw new Error('Persistent gateway mount may contain only per-run model sockets and the current-run memory socket');
     }
     if (!(await fs.lstat(join(o.gatewayDirectory,o.gatewaySocketName))).isSocket()) throw new Error('Current run model socket is not ready');
     const expectedImage=await trustedImageId(o,this.runner,true);startFence(o);
@@ -216,7 +217,7 @@ export class PersistentDockerBackend implements SandboxBackend {
     let attachment: DockerAttachment;
     try {
       startFence(o);attachment=this.runner.attach(['exec','--interactive','--workdir','/workspace',
-        '--env',`CHESTNUT_MODEL=${o.model}`,'--env',`CHESTNUT_MODEL_SOCKET=${o.gatewaySocketName}`,
+        '--env',`CHESTNUT_MODEL=${o.model}`,'--env',`CHESTNUT_MODEL_PROTOCOL=${o.apiProtocol??'chat-completions'}`,'--env',`CHESTNUT_MODEL_SOCKET=${o.gatewaySocketName}`,
         '--env',`CHESTNUT_TASK_ID=${input.taskId}`,'--env',`CHESTNUT_RUN_ID=${input.runId}`,
         '--env','PI_OFFLINE=1','--env','PI_NO_UPDATE_CHECK=1',containerName(input.botId),
         'node','/opt/chestnut/persistent-task-entry.mjs']);

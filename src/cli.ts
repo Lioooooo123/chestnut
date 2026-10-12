@@ -17,7 +17,7 @@ if(command==='doctor'){
   // Initialize the WAL/schema once before the two processes first open a new database.
   const initialStore = new Store(c.dbPath); initialStore.close();
   const entry=fileURLToPath(import.meta.url);
-  const children=['api','worker'].map(role=>spawn(process.execPath,[entry,role],{stdio:'inherit',env:role==='api'?{...process.env,OPENAI_API_KEY:undefined}:process.env}));
+  const children=['api','worker'].map(role=>spawn(process.execPath,[entry,role],{stdio:'inherit',env:role==='api'?{...process.env,CHESTNUT_API_KEY_CONFIGURED:c.apiKey?'1':'0',OPENAI_API_KEY:undefined}:process.env}));
   let ending=false;
   const stop=()=>{if(ending)return;ending=true;for(const child of children)child.kill('SIGTERM');};
   process.on('SIGINT',stop);process.on('SIGTERM',stop);

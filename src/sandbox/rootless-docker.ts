@@ -11,6 +11,7 @@ export interface RootlessDockerOptions {
   dataRoot: string;
   gatewayDirectory: string;
   model: string;
+  apiProtocol?: 'chat-completions'|'responses';
   image?: string;
   memoryMb?: number;
   cpus?: number;
@@ -58,7 +59,7 @@ export function buildDockerArgs(input: WorkerInput, options: RootlessDockerOptio
     '--mount', `type=bind,source=${safeMountPath(options.gatewayDirectory)},target=/run/chestnut,readonly`,
     '--env', 'HOME=/tmp/home', '--env', 'PI_CODING_AGENT_DIR=/tmp/pi-agent',
     '--env', 'PI_OFFLINE=1', '--env', 'PI_NO_UPDATE_CHECK=1',
-    '--env', `CHESTNUT_MODEL=${options.model}`,
+    '--env', `CHESTNUT_MODEL=${options.model}`, '--env', `CHESTNUT_MODEL_PROTOCOL=${options.apiProtocol??'chat-completions'}`,
     image, `/session/${basename(input.sessionPath)}`,
   ];
 }
@@ -87,6 +88,13 @@ export async function cleanupStaleContainer(input: { runId: string; botId: strin
   await execFileAsync('docker', ['container', 'rm', '--force', name], { timeout: 15_000, maxBuffer: 1024 * 1024 });
   if (await list()) throw new Error('Container still exists after removal; keep bot quarantined');
 }
+/** Exact socket-only mount allowlist; both brokers remain outside the guest. */
+export async function verifyGatewaySockets(directory:string,modelSocket:string,memorySocket?:string){
+  const allowed=new Set([modelSocket,...(memorySocket?[memorySocket]:[])]);
+  const entries=await readdir(directory);
+  if(!entries.includes(modelSocket)||entries.some(entry=>!allowed.has(entry)))throw new Error('Gateway mount may contain only current model and memory sockets');
+  for(const entry of entries)if(!(await lstat(join(directory,entry))).isSocket())throw new Error('Trusted gateway socket is not listening');
+}
 /** Only fixed Docker operations execute on the host; all agent tools run inside it. */
 export class RootlessDockerBackend implements SandboxBackend {
   private readonly options: RootlessDockerOptions;
@@ -101,10 +109,7 @@ export class RootlessDockerBackend implements SandboxBackend {
       if ((await lstat(input.sessionPath)).isSymbolicLink()) throw new Error('Pi session must not be a symlink');
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     await verifyDirectory(this.options.gatewayDirectory, this.options.gatewayDirectory);
-    const gatewayEntries = await readdir(this.options.gatewayDirectory);
-    if (gatewayEntries.length !== 1 || gatewayEntries[0] !== 'model.sock') throw new Error('Gateway mount must contain only its model socket, never configuration or credentials');
-    const socket = await lstat(join(this.options.gatewayDirectory, 'model.sock'));
-    if (!socket.isSocket()) throw new Error('Trusted model gateway is not listening');
+    await verifyGatewaySockets(this.options.gatewayDirectory,'model.sock','memory.sock');
     const workspaceRelative = relative(input.workspace, this.options.gatewayDirectory);
     if (!workspaceRelative.startsWith('..') && !isAbsolute(workspaceRelative)) throw new Error('Gateway cannot live inside the sandbox workspace');
     let info: string;

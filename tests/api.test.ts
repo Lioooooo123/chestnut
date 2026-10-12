@@ -62,3 +62,11 @@ test('maintenance API queues idempotent Dreaming and exposes sourced conflicts w
     assert.equal((await request(api,'DELETE',path,{ requestId:randomUUID(),id:randomUUID() })).status,404);
   } finally { api.close(); s.close(); rmSync(root,{recursive:true,force:true}); }
 });
+test('ChatGPT API starts the outer flow, exposes safe status and logout clears the saved grant',async()=>{
+ const root=mkdtempSync(join(realpathSync(tmpdir()),'cn-auth-api-'));const s=new Store(':memory:');
+ const api=createApi(s,config({CHESTNUT_DATA_DIR:root}),{oauthFlow:{async login(){return {type:'oauth',access:'hidden-access',refresh:'hidden-refresh',expires:Date.now()+3600000,clientId:'issued-client',scopes:['chatgpt.tokens.use.direct']};},async refresh(c){return c;}}});
+ try{assert.equal((await request(api,'GET','/api/auth')).status,200);const id=randomUUID();assert.equal((await request(api,'POST','/api/auth/chatgpt',{requestId:id})).status,202);
+  const status=await request(api,'GET','/api/auth');assert.equal(JSON.parse(status.body).connected,true);assert.ok(!status.body.includes('hidden-access'));assert.ok(!status.body.includes('hidden-refresh'));
+  assert.equal((await request(api,'DELETE','/api/auth',{})).status,200);assert.equal(JSON.parse((await request(api,'GET','/api/auth')).body).connected,false);
+ }finally{api.close();s.close();rmSync(root,{recursive:true,force:true});}
+});

@@ -9,7 +9,8 @@ const state = {
   submissions: new Map(), commandType: 'follow_up', refreshing: false,
   refreshAgain: false, botRevision: 0, eventTaskId: null,
   busy: { bot: false, task: false, command: false }, tasksLoaded: false,
-  view: 'tasks', memory: null, maintenance: null, maintenanceError: null, maintenanceBusy: false, memoryProposalSource: null, memoryId: null, memoryRevision: null, memorySettingsVersion: null, memorySettingsDirty: false, memoryBusy: false, memoryDrafts: new Map(),
+  auth:null,authBusy:false,authModels:[],authRevision:0,authModelsAt:0,
+view: 'tasks', memory: null, maintenance: null, maintenanceError: null, maintenanceBusy: false, memoryProposalSource: null, memoryId: null, memoryRevision: null, memorySettingsVersion: null, memorySettingsDirty: false, memoryBusy: false, memoryDrafts: new Map(),
 };
 let toastTimer;
 let pollTimer;
@@ -286,7 +287,7 @@ async function fetchEvents(botId, taskId) {
 }
 async function refresh() {
   if (state.refreshing) { state.refreshAgain = true; return; }
-  state.refreshing = true; clearTimeout(pollTimer);
+  state.refreshing = true; clearTimeout(pollTimer); void refreshAuth();
   try {
     const [status, bots] = await Promise.all([api('/api/status'), api('/api/bots')]);
     if (!Array.isArray(bots)) throw new Error('The server returned an invalid bot list.');
@@ -528,6 +529,39 @@ async function changeMemory(method, suffix, payload) {
   } catch (error) { if (botId === state.botId && revision === state.botRevision) setError('memory-error', `${error.message} Your draft is kept. ${suffix === '/settings' ? 'Reload settings' : 'Select the latest note'} before resolving a conflict.`); else toast(`Memory change was not confirmed: ${error.message}`); }
   finally { state.memoryBusy = false; renderMemory(); }
 }
+function renderAuth(){
+  const auth=state.auth;const pending=['starting','awaiting'].includes(auth?.login?.state);
+  $('auth-status').textContent=!auth?'Checking model access…':auth.connected?'Connected to ChatGPT'+(auth.model?` · ${auth.model}`:' · Select a model'):pending?'Complete ChatGPT sign-in in your browser.':auth.apiKeyConfigured&&!auth.preferred?'An API key is configured for the outer worker.':'Connect ChatGPT to run real Pi tasks.';
+  $('auth-connect').disabled=state.authBusy||pending;$('auth-connect').hidden=!!auth?.connected;
+  $('auth-disconnect').hidden=!(auth?.connected||pending);$('auth-disconnect').disabled=state.authBusy;
+  $('auth-login').hidden=!pending;$('auth-link').hidden=!auth?.login?.url;
+  if(auth?.login?.url){try{const url=new URL(auth.login.url);if(url.origin==='https://auth.openai.com'&&url.pathname==='/api/accounts/authorize')$('auth-link').href=url.href;else $('auth-link').hidden=true;}catch{$('auth-link').hidden=true;}}
+  $('auth-model').hidden=$('auth-model-label').hidden=!auth?.connected;
+  $('auth-model').disabled=state.authBusy;const model=$('auth-model');if(document.activeElement===model)return;model.replaceChildren();
+  for(const choice of state.authModels){const option=element('option','',choice.name);option.value=choice.id;model.append(option);}model.value=auth?.model||state.authModels[0]?.id||'';
+  if(auth?.login?.error)setError('auth-error',auth.login.error);
+}
+async function refreshAuth(){
+  const revision=state.authRevision;
+  try{const auth=await api('/api/auth');if(revision!==state.authRevision)return;
+    if(auth.login?.id!==state.auth?.login?.id){state.authModels=[];state.authModelsAt=0;}state.auth=auth;
+    if(auth.connected&&!state.authBusy&&!state.authModels.length&&Date.now()-state.authModelsAt>60000){state.authModelsAt=Date.now();const models=await api('/api/auth/models');if(revision!==state.authRevision)return;state.authModels=models;
+      if(!auth.model&&models.length){const selected=await api('/api/auth/model',{method:'POST',body:JSON.stringify({model:models[0].id})});if(revision!==state.authRevision)return;state.auth={...auth,...selected};}
+    }
+    if(!auth.connected)state.authModels=[];
+    renderAuth();renderControls();
+  }catch(error){setError('auth-error',error.message);}
+}
+async function changeAuth(method,path,payload={}){
+  if(state.authBusy)return;state.authRevision++;state.authBusy=true;renderAuth();setError('auth-error');
+  try{const result=await api(path,{method,body:JSON.stringify(payload)});if(path==='/api/auth/callback'||method==='DELETE')$('auth-callback-url').value='';state.auth=result;state.authModels=[];}
+  catch(error){setError('auth-error',error.message);}
+  finally{state.authBusy=false;renderAuth();await refreshAuth();}
+}
+$('auth-connect').addEventListener('click',()=>changeAuth('POST','/api/auth/chatgpt',{requestId:crypto.randomUUID()}));
+$('auth-disconnect').addEventListener('click',()=>changeAuth('DELETE','/api/auth'));
+$('auth-model').addEventListener('change',()=>changeAuth('POST','/api/auth/model',{model:$('auth-model').value}));
+$('auth-callback-form').addEventListener('submit',event=>{event.preventDefault();return changeAuth('POST','/api/auth/callback',{id:state.auth?.login?.id,url:$('auth-callback-url').value.trim()});});
 $('tasks-tab').addEventListener('click', () => setView('tasks'));
 $('memory-tab').addEventListener('click', () => setView('memory'));
 $('memory-search').addEventListener('input', renderMemory);

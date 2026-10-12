@@ -21,3 +21,23 @@ export function openAiMaintenanceProvider(apiKey: string, model: string, transpo
     } catch { throw new Error('Invalid memory provider JSON response'); }
   };
 }
+
+export function chatGptMaintenanceProvider(auth:{apiKey(signal?:AbortSignal):Promise<string>;status():{model:string|null}},fallbackModel:string,transport:typeof fetch=fetch):MaintenanceProvider{
+  return async input=>{
+    const signal=AbortSignal.any([input.signal,AbortSignal.timeout(30000)]);
+    const key=await auth.apiKey(signal);let response:Response;
+    try{response=await transport('https://api.openai.com/v1/responses',{method:'POST',redirect:'error',signal,headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:JSON.stringify({model:auth.status().model??fallbackModel,store:false,stream:true,instructions:policy,input:[{role:'user',content:JSON.stringify({mode:input.mode,tasks:input.tasks,entries:input.entries})}],text:{format:{type:'json_object'}}})});}catch{throw new Error('Memory provider request failed');}
+    if(!response.ok){await response.body?.cancel();throw new Error(`Memory provider returned HTTP ${response.status}`);}
+    const reader=response.body?.getReader();if(!reader)throw new Error('Missing memory response stream');
+    const decoder=new TextDecoder();let buffer='',bytes=0,completed=false,output='';
+    try{while(true){const part=await reader.read();if(part.done)break;bytes+=part.value.length;if(bytes>128000)throw new Error('Memory response exceeded limit');buffer+=decoder.decode(part.value,{stream:true});let newline:number;
+      while((newline=buffer.indexOf('\n'))>=0){const row=buffer.slice(0,newline).trim();buffer=buffer.slice(newline+1);if(!row.startsWith('data:')||row.slice(5).trim()==='[DONE]')continue;
+        let event:any;try{event=JSON.parse(row.slice(5));}catch{throw new Error('Invalid memory response event');}
+        if(['error','response.failed','response.incomplete'].includes(event.type))throw new Error('Memory response did not complete');
+        if(event.type==='response.completed'){completed=true;output=(event.response?.output??[]).filter((item:any)=>item.type==='message').flatMap((item:any)=>item.content??[]).filter((part:any)=>part.type==='output_text').map((part:any)=>part.text).join('');}
+      }
+    }}catch{await reader.cancel().catch(()=>{});throw new Error('Memory response stream failed');}finally{reader.releaseLock();}
+    if(!completed||output.length>32000)throw new Error('Memory response did not complete');
+    try{const plan=JSON.parse(output) as MaintenancePlan;if(!Array.isArray(plan.additions)||!Array.isArray(plan.removals)||!Array.isArray(plan.conflicts))throw 0;return plan;}catch{throw new Error('Invalid memory provider JSON response');}
+  };
+}

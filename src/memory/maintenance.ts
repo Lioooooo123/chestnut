@@ -4,7 +4,8 @@ import { Store } from '../store.ts';
 import { type Config } from '../config.ts';
 import { AppError, requireId, requireText, type Task } from '../types.ts';
 import { MemoryRepository, type MemoryEntry, type MemoryKind, type MaintenanceCommit } from './repository.ts';
-import { openAiMaintenanceProvider } from './provider.ts';
+import { AuthManager } from '../auth.ts';
+import { chatGptMaintenanceProvider, openAiMaintenanceProvider } from './provider.ts';
 export interface MaintenanceTask { id: string; createdAt: number; user: string[]; result: string }
 export interface MaintenanceInput { mode: 'extract' | 'dream'; tasks: MaintenanceTask[]; entries: MemoryEntry[]; signal: AbortSignal }
 export interface MaintenancePlan {
@@ -37,11 +38,11 @@ export const explicitMaintenanceProvider: MaintenanceProvider = async input => {
 /** Cross-process leases/cost accounting live in the control ledger; notes and processed cursors commit together in Git. */
 export class MemoryMaintenance {
   private readonly store: Store; private readonly c: Config; private readonly provider: MaintenanceProvider;
-  private repo?: MemoryRepository;
+  private repo?: MemoryRepository;private auth:AuthManager;
   private running = false; private controller?: AbortController;
   constructor(store: Store, c: Config, provider?: MaintenanceProvider) {
-    this.store = store; this.c = c;
-    this.provider = provider ?? (c.mode === 'pi' && c.apiKey ? openAiMaintenanceProvider(c.apiKey, c.model) : explicitMaintenanceProvider);
+    this.store = store; this.c = c;this.auth=new AuthManager(join(c.root,'control','auth'));
+    this.provider = provider ?? (c.mode === 'pi' ? async input=>this.auth.status().preferred||this.auth.status().connected?chatGptMaintenanceProvider(this.auth,c.model)(input):c.apiKey?openAiMaintenanceProvider(c.apiKey,c.model)(input):Promise.reject(new Error('Sign in required')) : explicitMaintenanceProvider);
     store.db.exec(`CREATE TABLE IF NOT EXISTS memory_jobs(botId TEXT PRIMARY KEY REFERENCES bots(id),state TEXT NOT NULL DEFAULT 'idle',token TEXT,leaseUntil INTEGER NOT NULL DEFAULT 0,requested TEXT,lastRequest TEXT,retryAt INTEGER NOT NULL DEFAULT 0,updatedAt INTEGER NOT NULL DEFAULT 0,error TEXT,added INTEGER NOT NULL DEFAULT 0,removed INTEGER NOT NULL DEFAULT 0,provider TEXT NOT NULL DEFAULT 'pending');
       CREATE TABLE IF NOT EXISTS memory_budget(day TEXT PRIMARY KEY,calls INTEGER NOT NULL,characters INTEGER NOT NULL);`);
   }
@@ -68,7 +69,7 @@ export class MemoryMaintenance {
     if (this.running) return;
     this.running = true; this.controller = new AbortController();
     try {
-      if (this.c.mode === 'pi' && !this.c.apiKey) return;
+      if (this.c.mode === 'pi' && !(this.auth.status().connected||(!this.auth.status().preferred&&this.c.apiKey))) return;
       const repo = this.repo ??= new MemoryRepository(join(this.c.root,'control','memory'));
       this.store.db.prepare("UPDATE memory_jobs SET state='interrupted',token=NULL,retryAt=0,error='Maintenance process stopped. Committed Git progress is retained.' WHERE token IS NOT NULL AND leaseUntil<=?").run(now);
       for (const bot of this.store.bots()) {

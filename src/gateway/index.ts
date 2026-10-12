@@ -26,7 +26,9 @@ const ALLOWED_FIELDS = new Set([
 
 export interface ModelGatewayOptions {
   socketPath: string;
-  apiKey: string;
+  apiKey?: string;
+  getApiKey?: (signal:AbortSignal)=>Promise<string>;
+  apiProtocol?: 'chat-completions'|'responses';
   model: string;
   /** Only the official HTTPS endpoint is accepted, including in tests. */
   upstreamBaseUrl?: string;
@@ -131,6 +133,33 @@ function validateRequest(value: unknown, model: string, tokenCap: number): Recor
   }
   output[limitField] = Math.min(Number(value[limitField] ?? tokenCap), tokenCap);
   return output;
+}
+
+function validateResponses(value:unknown,model:string):Record<string,unknown>{
+  if(!record(value)||value.model!==model||value.stream!==true||value.store!==false||!Array.isArray(value.input))reject('Responses requires the fixed model, full input array, stream=true and store=false.');
+  const fields=new Set(['model','input','instructions','tools','tool_choice','parallel_tool_calls','stream','store','reasoning','text','include','max_output_tokens','temperature','top_p','service_tier','prompt_cache_key','prompt_cache_retention','prompt_cache_options']);
+  if(Object.keys(value).some(key=>!fields.has(key)))reject('Unsupported Responses field.');
+  const checkText=(content:unknown)=>{if(typeof content==='string')return;if(!Array.isArray(content)||content.some(part=>!record(part)||!['input_text','output_text','summary_text'].includes(String(part.type))||typeof part.text!=='string'||Object.keys(part).some(k=>!['type','text','annotations'].includes(k))))reject('Responses accepts only inline text.');};
+  const input=value.input.map(item=>{
+    if(!record(item))reject('Invalid Responses input.');
+    if(item.type==='function_call'){if(typeof item.call_id!=='string'||typeof item.name!=='string'||typeof item.arguments!=='string'||Object.keys(item).some(k=>!['type','id','call_id','name','arguments','status','namespace'].includes(k)))reject('Invalid function call.');return item;}
+    if(item.type==='function_call_output'){if(typeof item.call_id!=='string'||Object.keys(item).some(k=>!['type','call_id','output','id','status'].includes(k)))reject('Invalid function output.');checkText(item.output);return item;}
+    if(item.type==='reasoning'){if(typeof item.encrypted_content!=='string'||Object.keys(item).some(k=>!['type','id','encrypted_content','summary','status'].includes(k)))reject('Reasoning must be inline.');checkText(item.summary??[]);return item;}
+    if((item.type!==undefined&&item.type!=='message')||!['system','developer','user','assistant'].includes(String(item.role))||Object.keys(item).some(k=>!['type','role','content','id','status'].includes(k)))reject('Unsupported Responses input type.');
+    checkText(item.content);return {...item,role:item.role==='system'?'developer':item.role};
+  });
+  if(value.instructions!==undefined&&typeof value.instructions!=='string')reject('Invalid instructions.');
+  const validateTool=(tool:unknown)=>{if(!record(tool)||tool.type!=='function'||typeof tool.name!=='string'||Object.keys(tool).some(k=>!['type','name','description','parameters','strict'].includes(k))||!record(tool.parameters))reject('Only function tools are supported.');return tool;};
+  let tools:unknown[]|undefined;
+  if(value.tools!==undefined){if(!Array.isArray(value.tools))reject('Invalid tools.');const functions=value.tools.flatMap(tool=>{if(record(tool)&&tool.type==='namespace'){if(tool.name!=='chestnut'||!Array.isArray(tool.tools)||Object.keys(tool).some(k=>!['type','name','description','tools'].includes(k)))reject('Only the Chestnut function namespace is supported.');return tool.tools.map(validateTool);}return [validateTool(tool)];});tools=functions.length?[{type:'namespace',name:'chestnut',tools:functions}]:[];}
+  if(value.tool_choice!==undefined&&!['auto','none','required'].includes(String(value.tool_choice)))reject('Invalid tool choice.');
+  if(value.reasoning!==undefined&&(!record(value.reasoning)||Object.keys(value.reasoning).some(k=>!['effort','summary'].includes(k))))reject('Invalid reasoning options.');
+  if(value.text!==undefined&&(!record(value.text)||Object.keys(value.text).some(k=>!['format','verbosity'].includes(k))))reject('Invalid text options.');
+  if(value.include!==undefined&&(!Array.isArray(value.include)||value.include.some(x=>x!=='reasoning.encrypted_content')))reject('Unsupported included data.');
+  const body:Record<string,unknown>={...value,input,...(tools?{tools}:{})};
+  // ChatGPT plan usage rejects these fields. Bounds are enforced by deadline and stream bytes instead.
+  for(const field of ['max_output_tokens','temperature','top_p','prompt_cache_retention','prompt_cache_options','service_tier'])delete body[field];
+  return body;
 }
 
 async function prepareSocketDirectory(socketPath: string): Promise<void> {
@@ -239,7 +268,7 @@ export function createGatewayHttpServer(options: Omit<ModelGatewayOptions, 'sock
   close(): Promise<void>;
 } {
   const { apiKey, model } = options;
-  if (!apiKey || !/^[\x21-\x7e]{1,4096}$/.test(apiKey)) throw new Error('A valid API key is required.');
+  if (!options.getApiKey && (!apiKey || !/^[\x21-\x7e]{1,4096}$/.test(apiKey))) throw new Error('A valid API key is required.');
   if (!model || typeof model !== 'string' || model.length > 200) throw new Error('A model is required.');
   // Literal allowlist, not a hostname suffix check. Disable redirects as well.
   const base = options.upstreamBaseUrl ?? 'https://api.openai.com/v1';
@@ -250,6 +279,7 @@ export function createGatewayHttpServer(options: Omit<ModelGatewayOptions, 'sock
   const timeoutMs = options.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS;
   if (!Number.isSafeInteger(tokenCap) || tokenCap < 1) throw new Error('Invalid output token cap.');
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 2_147_483_647) throw new Error('Invalid request timeout.');
+  const endpoint = options.apiProtocol==='responses' ? '/v1/responses' : '/v1/chat/completions';
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const controllers = new Set<AbortController>();
   const sockets = new Set<Socket>();
@@ -257,7 +287,7 @@ export function createGatewayHttpServer(options: Omit<ModelGatewayOptions, 'sock
   const server = createServer({ maxHeaderSize: 16 * 1024 }, (request, response) => {
     if(options.authorize && !options.authorize()){sendError(response,403,'Model capability is no longer authorized.');return;}
     // Never use the incoming host, authorization, proxy, or arbitrary headers.
-    if (request.method !== 'POST' || request.url !== '/v1/chat/completions') {
+    if (request.method !== 'POST' || request.url !== endpoint) {
       sendError(response, 404, 'Endpoint not found.'); return;
     }
     if (!/^application\/json(?:\s*;|\s*$)/i.test(request.headers['content-type'] ?? '')) {
@@ -278,12 +308,15 @@ export function createGatewayHttpServer(options: Omit<ModelGatewayOptions, 'sock
     response.once('close', disconnect);
     void (async () => {
       try {
-        const body = validateRequest(await readBody(request, controller.signal), model, tokenCap);
+        const incoming=await readBody(request,controller.signal);
+        const body=options.apiProtocol==='responses'?validateResponses(incoming,model):validateRequest(incoming,model,tokenCap);
+        const credential=options.getApiKey?await options.getApiKey(controller.signal):apiKey!;
+        if(!/^[\x21-\x7e]{1,16000}$/.test(credential))throw new GatewayError(401,'Model credential unavailable.');
         if(options.authorize && !options.authorize())throw new GatewayError(403,'Model capability is no longer authorized.');
-        const upstream = await fetchImpl('https://api.openai.com/v1/chat/completions', {
+        const upstream = await fetchImpl(`https://api.openai.com${endpoint}`, {
           method: 'POST', redirect: 'error', signal: controller.signal,
           headers: {
-            authorization: `Bearer ${apiKey}`, 'content-type': 'application/json',
+            authorization: `Bearer ${credential}`, 'content-type': 'application/json',
             accept: body.stream === true ? 'text/event-stream' : 'application/json',
           },
           body: JSON.stringify(body),
@@ -301,7 +334,8 @@ export function createGatewayHttpServer(options: Omit<ModelGatewayOptions, 'sock
         });
         response.flushHeaders();
         if (!upstream.body) { response.end(); return; }
-        await pipeline(Readable.fromWeb(upstream.body as unknown as NodeReadableStream<Uint8Array>), new SecretRedactor(apiKey), response,
+        let responseBytes=0;const limiter=new Transform({transform(chunk:Buffer,_encoding,done){responseBytes+=chunk.length;if(responseBytes>8*1024*1024)done(new Error('Model stream exceeded limit'));else done(null,chunk);}});
+        await pipeline(Readable.fromWeb(upstream.body as unknown as NodeReadableStream<Uint8Array>), limiter, new SecretRedactor(credential), response,
           { signal: controller.signal });
       } catch (error) {
         if (timedOut) sendError(response, 504, 'The model request timed out.');

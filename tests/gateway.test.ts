@@ -326,3 +326,15 @@ test('trusted run fence denies revoked model capability before any provider call
 test('too-long Unix socket path fails with an actionable error before binding',async()=>{
   await assert.rejects(startModelGateway({socketPath:`/tmp/${'x'.repeat(104)}/model.sock`,apiKey,model}),/shorter CHESTNUT_DATA_DIR/);
 });
+test('ChatGPT Responses gateway refreshes outer credentials and strips unsupported plan fields',async t=>{
+  let sent:any;let keyCalls=0;
+  const f=await fixture(t,{apiProtocol:'responses',getApiKey:async()=>{keyCalls++;return 'oauth-secret-live';},fetchImpl:async(url,options)=>{assert.equal(url,'https://api.openai.com/v1/responses');assert.equal(new Headers(options!.headers).get('authorization'),'Bearer oauth-secret-live');sent=JSON.parse(options!.body as string);return new Response('data: '+JSON.stringify({type:'response.completed',response:{output:[]}})+'\n\n',{headers:{'content-type':'text/event-stream'}});}});
+  const response=await call(f.socketPath,{model,stream:true,store:false,max_output_tokens:4096,input:[{role:'user',content:[{type:'input_text',text:'hello'}]}],tools:[{type:'function',name:'memory_search',parameters:{type:'object',properties:{}}}]},{path:'/v1/responses'});
+  assert.equal(response.status,200);assert.equal(keyCalls,1);assert.equal(sent.max_output_tokens,undefined);assert.equal(sent.store,false);assert.equal(sent.tools[0].type,'namespace');assert.match(response.text,/response.completed/);
+});
+test('Responses denies hosted tools, external content, previous response references and nonstream requests before credentials',async t=>{
+  let calls=0;const f=await fixture(t,{apiProtocol:'responses',getApiKey:async()=>{calls++;return 'oauth-secret';}});
+  const good={model,stream:true,store:false,input:[{role:'user',content:'hello'}]};
+  for(const changed of [{...good,stream:false},{...good,store:true},{...good,previous_response_id:'other'},{...good,tools:[{type:'web_search'}]},{...good,input:[{type:'item_reference',id:'other'}]},{...good,input:[{role:'user',content:[{type:'input_image',image_url:'https://outside.invalid/'}]}]}])assert.equal((await call(f.socketPath,changed,{path:'/v1/responses'})).status,400);
+  assert.equal(calls,0);
+});

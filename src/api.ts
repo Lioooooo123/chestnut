@@ -4,16 +4,18 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { Store } from './store.ts';
 import { AppError } from './types.ts';
+import { AuthManager, type OAuthFlow } from './auth.ts';
 import { type Config } from './config.ts';
 import { MemoryMaintenance } from './memory/maintenance.ts';
 import { MemoryRepository, type SaveMemory, type UpdateMemory } from './memory/repository.ts';
 const webRoot=fileURLToPath(new URL('../web/',import.meta.url));
 function send(res:ServerResponse,status:number,data:unknown) {res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(data));}
 async function body(req:IncomingMessage) { if(!req.headers['content-type']?.startsWith('application/json'))throw new AppError(415,'Use application/json'); req.setEncoding('utf8'); let text=''; for await(const chunk of req){text+=chunk; if(Buffer.byteLength(text)>65536)throw new AppError(413,'Request too large');} try {const parsed=JSON.parse(text); if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw 0; return parsed as Record<string,unknown>;}catch{throw new AppError(400,'Invalid JSON object');} }
-export function createApi(store:Store,c:Config) {
+export function createApi(store:Store,c:Config,dependencies:{oauthFlow?:OAuthFlow;authFetch?:typeof fetch}={}) {
+  let auth:AuthManager|undefined;
   let memory: MemoryRepository | undefined;
   let maintenance: MemoryMaintenance | undefined;
-  return createServer(async(req,res)=>{
+  const server = createServer(async(req,res)=>{
     try {
       const host=req.headers.host ?? ''; const expectedPort=(res.socket?.localPort ?? c.port); const allowedHost=c.host==='::1'?`[::1]:${expectedPort}`:`${c.host}:${expectedPort}`;
       if(![allowedHost,`localhost:${expectedPort}`].includes(host))throw new AppError(403,'Invalid Host header');
@@ -22,6 +24,17 @@ export function createApi(store:Store,c:Config) {
       if(req.method==='GET' && ['/','/index.html','/app.js','/styles.css'].includes(url.pathname)) {
         const file=url.pathname==='/'?'index.html':url.pathname.slice(1); const data=await readFile(join(webRoot,file));
         res.writeHead(200,{'content-type':file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8','cache-control':'no-cache','content-security-policy':"default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",'x-content-type-options':'nosniff'});res.end(data);return;
+      }
+      if(['/api/auth','/api/auth/chatgpt','/api/auth/callback','/api/auth/models','/api/auth/model'].includes(url.pathname)){
+        auth??=new AuthManager(join(c.root,'control','auth'),dependencies.oauthFlow,dependencies.authFetch);
+        if(req.method==='GET'&&url.pathname==='/api/auth'){send(res,200,{...auth.status(),apiKeyConfigured:c.apiKeyConfigured??!!c.apiKey});return;}
+        if(req.method==='GET'&&url.pathname==='/api/auth/models'){send(res,200,await auth.models());return;}
+        const b=await body(req);
+        if(req.method==='POST'&&url.pathname==='/api/auth/chatgpt'){send(res,202,await auth.startLogin(b.requestId as string));return;}
+        if(req.method==='POST'&&url.pathname==='/api/auth/callback'){send(res,202,auth.submitCallback(b.id as string,b.url as string));return;}
+        if(req.method==='POST'&&url.pathname==='/api/auth/model'){send(res,200,await auth.selectModel(b.model as string));return;}
+        if(req.method==='DELETE'&&url.pathname==='/api/auth'){send(res,200,await auth.logout());return;}
+        throw new AppError(405,'Method not allowed');
       }
       if(url.pathname==='/api/status' && req.method==='GET') {send(res,200,{mode:c.mode,sandboxProfile:c.sandboxProfile,experimental:c.sandboxProfile==='persistent',worker:store.workerStatus(),concurrency:1,quarantines:store.quarantines(),isolation:c.mode==='demo'?'none (model-less; no shell or network)':'rootless Docker, network none',version:'0.1.0'});return;}
       if(url.pathname==='/api/events' && req.method==='GET'){send(res,200,store.changes(cursor(url)));return;}
@@ -64,5 +77,7 @@ export function createApi(store:Store,c:Config) {
       throw new AppError(404,'Not found');
     }catch(error){if(!res.headersSent)send(res,error instanceof AppError?error.status:500,{error:error instanceof AppError?error.message:'Internal error'});else res.end();}
   });
+  server.on('close',()=>auth?.close());
+  return server;
 }
 function cursor(url:URL){const n=Number(url.searchParams.get('after') ?? 0); if(!Number.isSafeInteger(n)||n<0)throw new AppError(400,'Invalid event cursor');return n;}

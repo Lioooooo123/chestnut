@@ -12,6 +12,7 @@ import { type WorkerAdapter, type WorkerEvent } from './pi/types.ts';
 import { PersistentDockerBackend,cleanupPersistentBot,type PersistentCleanupOptions } from './sandbox/persistent-docker.ts';
 import { acquireEnvironmentLock,type EnvironmentLock } from './control/environment-lock.ts';
 import { startModelGateway } from './gateway/index.ts';
+import { AuthManager } from './auth.ts';
 import { MemoryRepository } from './memory/repository.ts';
 import { MemoryMaintenance } from './memory/maintenance.ts';
 import { memoryContext } from './memory/context.ts';
@@ -23,6 +24,7 @@ export class Worker {
   readonly id=randomUUID();
   private stopping=false;
   private active?:WorkerAdapter;
+  private auth?:AuthManager;
   private maintenance?: MemoryMaintenance;
   private maintenanceWork?: Promise<void>;
   private readonly store:Store;
@@ -32,7 +34,7 @@ export class Worker {
   constructor(store:Store,c:Config,factory?:AdapterFactory,deps:WorkerDependencies={}){this.store=store;this.c=c;this.factory=factory;this.deps=deps;}
   async stop(){this.stopping=true;this.maintenance?.stop();await this.active?.cancel().catch(()=>{});}
   async run(){
-    if(this.c.mode==='pi'&&!this.c.apiKey)throw new Error('Real mode needs OPENAI_API_KEY in the outer worker environment');
+    this.auth=new AuthManager(join(this.c.root,'control','auth'));
     this.maintenance = new MemoryMaintenance(this.store,this.c);
     const maintain = () => {
       if (this.stopping || this.maintenanceWork) return;
@@ -86,6 +88,10 @@ export class Worker {
     let ready=false,accepting=true,leaseLost=false,result:string|null=null,error:string|null=null,aborted=false,modelError=false,cleanupConfirmed=this.c.sandboxProfile!=='persistent';
     let heartbeat:ReturnType<typeof setInterval>|undefined;
     try{
+      const authStatus=this.auth!.status();
+      const apiProtocol: 'responses'|'chat-completions'=authStatus.preferred||authStatus.connected?'responses':'chat-completions';
+      const model=apiProtocol==='responses'?(authStatus.model??this.c.model):this.c.model;
+      if(this.c.mode==='pi'){if(apiProtocol==='responses')await this.auth!.apiKey();else if(!this.c.apiKey)throw new Error('Sign in with ChatGPT or configure an outer worker API key before running real tasks');}
       this.store.ensureEnvironment(run.botId,this.c.sandboxProfile);
       if(this.c.sandboxProfile==='persistent'){
         environmentLock=await (this.deps.acquireLock ?? acquireEnvironmentLock)(join(this.c.root,'control','os-locks'),run.botId);
@@ -104,8 +110,8 @@ export class Worker {
         await mkdir(path,{recursive:true,mode:0o700});
         if((await lstat(path)).isSymbolicLink()||await realpath(path)!==resolve(path))throw new Error('Unsafe sandbox path');
       }
-      if(this.c.mode==='pi')gateway=await (this.deps.gateway ?? startModelGateway)({socketPath:join(gatewayDirectory,gatewaySocketName),apiKey:this.c.apiKey!,model:this.c.model,authorize:()=>this.store.mayExecute(run)&&!this.stopping&&(!environmentLock||environmentLock.isHeld())});
-      adapter=this.factory?.(run,gatewayDirectory) ?? (this.c.mode==='demo'?new FakeAdapter({delayMs:2500}):new PiRpcAdapter(persistentOptions?new PersistentDockerBackend({...persistentOptions,gatewaySocketName,model:this.c.model,networkPolicy:'none',canStart:()=>!this.stopping&&this.store.mayExecute(run)&&!!environmentLock?.isHeld(),runner:environmentLock!.runner}):new RootlessDockerBackend({dataRoot:this.c.sandboxRoot,gatewayDirectory,model:this.c.model,image:this.c.image}),{beforePrompt:()=>{if(this.stopping||!this.store.mayExecute(run)||(environmentLock&&!environmentLock.isHeld()))throw new Error('Run no longer owns its execution lease');},beforeSteer:()=>{if(this.stopping||!this.store.mayExecute(run)||(environmentLock&&!environmentLock.isHeld()))throw new Error('Run no longer accepts steering');}}));
+      if(this.c.mode==='pi')gateway=await (this.deps.gateway ?? startModelGateway)({socketPath:join(gatewayDirectory,gatewaySocketName),apiKey:apiProtocol==='responses'?undefined:this.c.apiKey,getApiKey:apiProtocol==='responses'?signal=>this.auth!.apiKey(signal):undefined,apiProtocol,model,authorize:()=>this.store.mayExecute(run)&&!this.stopping&&(!environmentLock||environmentLock.isHeld())});
+      adapter=this.factory?.(run,gatewayDirectory) ?? (this.c.mode==='demo'?new FakeAdapter({delayMs:2500}):new PiRpcAdapter(persistentOptions?new PersistentDockerBackend({...persistentOptions,gatewaySocketName,model,apiProtocol,networkPolicy:'none',canStart:()=>!this.stopping&&this.store.mayExecute(run)&&!!environmentLock?.isHeld(),runner:environmentLock!.runner}):new RootlessDockerBackend({dataRoot:this.c.sandboxRoot,gatewayDirectory,model,apiProtocol,image:this.c.image}),{beforePrompt:()=>{if(this.stopping||!this.store.mayExecute(run)||(environmentLock&&!environmentLock.isHeld()))throw new Error('Run no longer owns its execution lease');},beforeSteer:()=>{if(this.stopping||!this.store.mayExecute(run)||(environmentLock&&!environmentLock.isHeld()))throw new Error('Run no longer accepts steering');}}));
       this.active=adapter;
       heartbeat=setInterval(()=>{
         if((environmentLock&&!environmentLock.isHeld())||!this.store.renew(run)){leaseLost=true;accepting=false;void adapter?.cancel().catch(()=>{});void gateway?.close().catch(()=>{});}

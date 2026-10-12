@@ -163,3 +163,15 @@ test('unsupported cgroups block launch while trusted cleanup remains available',
     assert.equal(docker.current.State.Running,false);
   }finally{await f.dispose();}
 });
+test('persistent launch admits only the current run model and memory sockets', async () => {
+  const f = await fixture();
+  try {
+    const memory = join(f.options.gatewayDirectory,'run1.memory.sock'); await writeFile(memory,'unit-memory-socket-placeholder');
+    const filesystem = f.options.fileSystem!;
+    const options = {...f.options,fileSystem:{...filesystem,lstat:async(path:string)=>path===memory ? {isSymbolicLink:()=>false,isDirectory:()=>false,isSocket:()=>true} : filesystem.lstat(path)}};
+    const docker = new FakeDocker(options);
+    const transport = await new PersistentDockerBackend({...options,runner:docker}).launch(f.input); await transport.stop();
+    await writeFile(join(options.gatewayDirectory,'other-run.sock'),'not-current');
+    await assert.rejects(new PersistentDockerBackend({...options,runner:docker}).launch(f.input),/only per-run model sockets/);
+  } finally { await f.dispose(); }
+});

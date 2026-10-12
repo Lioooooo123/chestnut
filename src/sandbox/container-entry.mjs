@@ -7,8 +7,11 @@ import { existsSync } from 'node:fs';
 const model = process.env.CHESTNUT_MODEL;
 const sessionPath = process.argv[2];
 if (!model || !sessionPath?.startsWith('/session/') || sessionPath.includes('..')) throw new Error('Missing sandbox configuration');
+const protocol=process.env.CHESTNUT_MODEL_PROTOCOL??'chat-completions';
+if(!['chat-completions','responses'].includes(protocol))throw new Error('Invalid model protocol');
+const endpoint=protocol==='responses'?'/v1/responses':'/v1/chat/completions';
 const relay = createServer((incoming, outgoing) => {
-  if (incoming.method !== 'POST' || incoming.url !== '/v1/chat/completions') {
+  if (incoming.method !== 'POST' || incoming.url !== endpoint) {
     outgoing.writeHead(403); outgoing.end('Route not allowed'); return;
   }
   const upstream = request({ socketPath: '/run/chestnut/model.sock', path: incoming.url, method: 'POST', headers: { 'content-type': 'application/json' } }, response => {
@@ -24,7 +27,7 @@ await new Promise((resolve, reject) => { relay.once('error', reject); relay.list
 await mkdir('/tmp/pi-agent', { recursive: true, mode: 0o700 });
 await mkdir('/tmp/home', { recursive: true, mode: 0o700 });
 await writeFile('/tmp/pi-agent/models.json', JSON.stringify({ providers: { chestnut: {
-  baseUrl: 'http://127.0.0.1:4011/v1', api: 'openai-completions', apiKey: 'chestnut-local-no-secret',
+  baseUrl: 'http://127.0.0.1:4011/v1', api: protocol==='responses'?'openai-responses':'openai-completions', apiKey: 'chestnut-local-no-secret',
   models: [{ id: model, name: model, reasoning: false, input: ['text'], contextWindow: 128000, maxTokens: 8192,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, compat: { supportsDeveloperRole: false, supportsStore: false } }],
 } } }), { mode: 0o600 });

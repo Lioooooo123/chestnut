@@ -35,14 +35,21 @@ async function setup() {
   document.hidden = false; document.getElementById = (id) => { assert.ok(elements.has(id), `Missing element ${id}`); return elements.get(id); };
   document.createElement = (tag) => new Node(tag);
   document.querySelectorAll = (selector) => selector === '[data-command]' ? [elements.get('steer-tab'), elements.get('follow-up-tab')] : [];
-  const backend = { bots: [], tasks: [], events: [], memories: [], maintenance: { job: {state:'succeeded',provider:'explicit-demo',automatic:true}, progress: {cursor:7,lastDreamAt:Date.now(),conflicts:[]} }, memoryVersion: 'a'.repeat(40), memoryEnabled: true, memoryProject: null, status: { mode: 'demo', worker: { online: true }, quarantines: [] }, calls: [], failNextTask: false, failNetwork: false };
+  const backend = { auth: {connected:false,preferred:false,model:null,login:null,apiKeyConfigured:false}, authModels:[{id:'account-model',name:'Account model'}], bots: [], tasks: [], events: [], memories: [], maintenance: { job: {state:'succeeded',provider:'explicit-demo',automatic:true}, progress: {cursor:7,lastDreamAt:Date.now(),conflicts:[]} }, memoryVersion: 'a'.repeat(40), memoryEnabled: true, memoryProject: null, status: { mode: 'demo', worker: { online: true }, quarantines: [] }, calls: [], failNextTask: false, failNetwork: false };
   const response = (payload, status = 200) => ({ ok: status < 400, status, json: async () => structuredClone(payload) });
   const task = (botId, prompt) => { const result = { id: webcrypto.randomUUID(), botId, prompt, state: 'queued', result: null, error: null, createdAt: Date.now(), updatedAt: Date.now() }; backend.tasks.unshift(result); return result; };
   const fetch = async (url, options = {}) => {
     const pathname = url.split('?')[0]; const method = options.method || 'GET'; const body = options.body ? JSON.parse(options.body) : undefined;
     backend.calls.push({ pathname, url, method, body });
+    const authReply=pathname==='/api/auth'&&method==='GET'?structuredClone(backend.auth):null;
     if (backend.beforeFetch) await backend.beforeFetch({ pathname, method });
     if (backend.failNetwork) throw new TypeError('offline');
+    if (pathname === '/api/auth' && method === 'GET') return response(authReply);
+    if (pathname === '/api/auth' && method === 'DELETE') { backend.auth.connected=false;backend.auth.login=null;return response(backend.auth); }
+    if (pathname === '/api/auth/chatgpt') { backend.auth.login={id:body.requestId,state:'awaiting',url:'https://auth.openai.com/api/accounts/authorize?state=test'};return response(backend.auth); }
+    if (pathname === '/api/auth/models') return response(backend.authModels);
+    if (pathname === '/api/auth/model') { backend.auth.model=body.model;return response(backend.auth); }
+    if (pathname === '/api/auth/callback') return response(backend.auth);
     if (pathname === '/api/status') return response(backend.status);
     if (pathname === '/api/bots' && method === 'GET') return response(backend.bots);
     if (pathname === '/api/bots' && method === 'POST') { const bot = { id: webcrypto.randomUUID(), name: body.name, createdAt: Date.now() }; backend.bots.push(bot); return response(bot); }
@@ -77,7 +84,7 @@ async function setup() {
     return response(task(botId, body.prompt));
   };
   const timers = new Map(); let nextTimer = 0;
-  const context = vm.createContext({ document, window: new Node('window'), navigator: { clipboard: { writeText: async () => {} } }, localStorage: { getItem: () => null, setItem() {} }, crypto: webcrypto, fetch, AbortController, setTimeout: (fn, delay) => { const id = ++nextTimer; timers.set(id, { fn, delay }); return id; }, clearTimeout: (id) => timers.delete(id), console, TypeError });
+  const context = vm.createContext({ document, window: new Node('window'), navigator: { clipboard: { writeText: async () => {} } }, URL, localStorage: { getItem: () => null, setItem() {} }, crypto: webcrypto, fetch, AbortController, setTimeout: (fn, delay) => { const id = ++nextTimer; timers.set(id, { fn, delay }); return id; }, clearTimeout: (id) => timers.delete(id), console, TypeError });
   vm.runInContext(fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8'), context);
   const run = (source) => vm.runInContext(source, context);
   const flush = async () => { for (let i = 0; i < 200; i++) await Promise.resolve(); };
@@ -239,4 +246,17 @@ test('a failed Dreaming request stays visible and retry keeps the request ID', a
   assert.equal(s.el('memory-maintenance-error').hidden,false); assert.match(s.el('memory-maintenance-error').textContent,/unavailable/);
   s.backend.failMaintenance = false; await s.el('memory-dream').emit('click'); await s.flush();
   const calls = s.backend.calls.filter(c => c.pathname.endsWith('/maintenance') && c.method === 'POST'); assert.equal(calls[0].body.requestId,calls[1].body.requestId);
+});
+
+test('ChatGPT connection presents the official sign-in link and account models without credential inputs',async()=>{
+ const s=await setup();await s.el('auth-connect').emit('click');await s.flush();assert.equal(s.el('auth-link').href,'https://auth.openai.com/api/accounts/authorize?state=test');assert.equal(s.el('auth-link').hidden,false);
+ s.backend.auth={...s.backend.auth,connected:true,preferred:true,login:{state:'connected'}};await s.run('refreshAuth()');await s.flush();assert.match(s.el('auth-status').textContent,/Connected/);assert.equal(s.el('auth-model').hidden,false);
+ await s.el('auth-disconnect').emit('click');await s.flush();assert.equal(s.backend.auth.connected,false);
+});
+
+test('a stale auth status cannot hide a newer sign-in link',async()=>{
+ const s=await setup();let release;let waiting=false;let first=true;const gate=new Promise(r=>release=r);
+ s.backend.beforeFetch=async({pathname,method})=>{if(pathname==='/api/auth'&&method==='GET'&&first){first=false;waiting=true;await gate;}};
+ const old=s.run('refreshAuth()');for(let i=0;i<100&&!waiting;i++)await Promise.resolve();assert.equal(waiting,true);
+ await s.el('auth-connect').emit('click');release();await old;await s.flush();assert.equal(s.el('auth-link').hidden,false);
 });
