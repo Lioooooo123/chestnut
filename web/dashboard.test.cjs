@@ -486,3 +486,36 @@ test('chat journal excludes model callback/maintenance state and corrupt journal
   const s=await setup();s.run("state.auth={access:'credential-must-not-be-saved'};state.submissions.set('auth-callback',{id:'ignored',signature:'credential-must-not-be-saved'});saveChat()");assert.ok(!s.session.get('chestnut.chat.v1').includes('credential-must-not-be-saved'));
   const bad=await setup({session:new Map([['chestnut.chat.v1','{broken']])});assert.equal(bad.el('onboarding').hidden,false);assert.equal(bad.backend.calls.some(c=>c.method==='POST'),false);
 });
+
+test('actual chat journal functions round-trip supported drafts and pending IDs above the former read limit',async()=>{
+  const s=await setup();
+  s.run(`
+    for(let i=0;i<20;i++)state.drafts.set(crypto.randomUUID(),'t'.repeat(32000));
+    for(let i=0;i<30;i++){
+      const taskId=crypto.randomUUID(),botId=crypto.randomUUID();
+      state.commandDrafts.set(taskId,'c'.repeat(32000));
+      state.commandKinds.set(taskId,'steer');
+      submission('command:'+taskId+':steer',{botId,taskId,type:'steer',text:'p'.repeat(32000)});
+    }
+    saveChat();
+  `);
+  assert.ok(s.session.get('chestnut.chat.v1').length>2000000);assert.equal(s.run('state.chatStored'),true);
+  const before=s.run('JSON.stringify({drafts:[...state.drafts],commands:[...state.commandDrafts],pending:[...state.submissions]})');
+  const next=await setup(s);assert.equal(next.run('JSON.stringify({drafts:[...state.drafts],commands:[...state.commandDrafts],pending:[...state.submissions]})'),before);
+  assert.equal(next.run('state.chatStored'),true);assert.equal(next.backend.calls.some(call=>call.method==='POST'),false);
+  // Escaping can expand valid field sizes much further than their input length.
+  s.run(`state.drafts=new Map([...state.drafts].map(([key])=>[key,'\\u0001'.repeat(32000)]));state.commandDrafts=new Map([...state.commandDrafts].map(([key])=>[key,'\\u0001'.repeat(32000)]));saveChat()`);
+  assert.ok(s.session.get('chestnut.chat.v1').length>10000000);
+  const escaped=s.run('JSON.stringify({drafts:[...state.drafts],commands:[...state.commandDrafts],pending:[...state.submissions]})');
+  const reloaded=await setup(s);assert.equal(reloaded.run('JSON.stringify({drafts:[...state.drafts],commands:[...state.commandDrafts],pending:[...state.submissions]})'),escaped);assert.equal(reloaded.backend.calls.some(call=>call.method==='POST'),false);
+});
+
+test('storage quota failure retains the prior journal and in-tab drafts/IDs and warns even without a pending send',async()=>{
+  const s=await setup();await s.createBot();s.el('task-prompt').value='Saved draft';await s.el('task-prompt').emit('input');const prior=s.session.get('chestnut.chat.v1');
+  s.run("sessionStorage.setItem=()=>{throw new Error('QuotaExceededError')}");s.el('task-prompt').value='Keep in this tab';await s.el('task-prompt').emit('input');
+  assert.equal(s.run('state.chatStored'),false);assert.equal(s.session.get('chestnut.chat.v1'),prior);assert.equal(s.run('state.drafts.get(state.botId)'),'Keep in this tab');
+  assert.equal(s.el('chat-recovery').hidden,false);assert.match(s.el('chat-recovery').textContent,/copy unsent drafts before reloading/);
+  s.backend.failNextTask=true;await s.submit('Keep in this tab');const id=s.backend.calls.filter(c=>c.method==='POST'&&c.pathname.endsWith('/tasks')).at(-1).body.messageId;
+  assert.equal(s.run('state.submissions.get("task:"+state.botId).id'),id);assert.equal(s.session.get('chestnut.chat.v1'),prior);assert.equal(s.el('chat-recovery').hidden,false);
+  const restored=await setup(s);assert.equal(restored.el('task-prompt').value,'Saved draft');
+});

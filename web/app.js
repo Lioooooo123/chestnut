@@ -28,14 +28,17 @@ let botListSignature = '';
 let eventSignature = '';
 let scheduleSignature = '';
 const CHAT_STORAGE = 'chestnut.chat.v1';
+// Covers the bounded rows below even when JSON escapes every character. Reads
+// and writes must share this limit; browser quota failures remain explicit.
+const CHAT_MAX_SERIALIZED = 32000000;
 const chatKey = key => key === 'bot-create' || /^(task|command):/.test(key);
 function saveChat() {
-  try { sessionStorage.setItem(CHAT_STORAGE, JSON.stringify({version:1,botDraft:state.botDraft,drafts:[...state.drafts].slice(-20),commands:[...state.commandDrafts].slice(-30),kinds:[...state.commandKinds].slice(-30),selected:[...state.selectedTasks].slice(-20),pending:[...state.submissions].filter(([key])=>chatKey(key)).slice(-30)}));state.chatStored=true; }
+  try { const serialized=JSON.stringify({version:1,botDraft:state.botDraft,drafts:[...state.drafts].slice(-20),commands:[...state.commandDrafts].slice(-30),kinds:[...state.commandKinds].slice(-30),selected:[...state.selectedTasks].slice(-20),pending:[...state.submissions].filter(([key])=>chatKey(key)).slice(-30)});if(serialized.length>CHAT_MAX_SERIALIZED)throw new Error('Chat recovery capacity exceeded');sessionStorage.setItem(CHAT_STORAGE,serialized);state.chatStored=true; }
   catch { state.chatStored=false; }
 }
 function restoreChat() {
   try {
-    const raw=sessionStorage.getItem(CHAT_STORAGE);if(!raw||raw.length>2000000)return;
+    const raw=sessionStorage.getItem(CHAT_STORAGE);if(!raw)return;if(raw.length>CHAT_MAX_SERIALIZED){state.chatStored=false;return;}
     const saved=JSON.parse(raw);if(saved.version!==1)return;
     const strings=(rows,max)=>new Map(Array.isArray(rows)?rows.slice(-max).filter(row=>Array.isArray(row)&&row.length===2&&typeof row[0]==='string'&&row[0].length<200&&typeof row[1]==='string'&&row[1].length<=32000):[]);
     state.drafts=strings(saved.drafts,20);state.commandDrafts=strings(saved.commands,30);state.selectedTasks=strings(saved.selected,20);
@@ -310,8 +313,8 @@ function renderControls() {
   $('cancel-task').textContent = task?.state === 'cancelling' ? 'Cancelling…' : 'Cancel task';
   $('reuse-task').hidden=!task||ACTIVE.has(task.state);$('reuse-task').disabled=state.busy.task;
   const pending=[...state.submissions].filter(([key,value])=>chatKey(key)&&(key==='bot-create'||JSON.parse(value.signature).botId===state.botId));
-  $('chat-recovery').hidden=!pending.length||state.busy.task||state.busy.command||state.busy.bot;
-  $('chat-recovery').textContent=state.chatStored?'An unconfirmed send is kept for refresh. Check history, or retry the unchanged text with its original request ID. Nothing is resent automatically.':'Browser session storage is unavailable. Keep this tab open until the send is confirmed. Server history still persists; nothing is resent automatically.';
+  $('chat-recovery').hidden=state.chatStored&&(!pending.length||state.busy.task||state.busy.command||state.busy.bot);
+  $('chat-recovery').textContent=state.chatStored?'An unconfirmed send is kept for refresh. Check history, or retry the unchanged text with its original request ID. Nothing is resent automatically.':'Browser could not save chat recovery data. Keep this tab open and copy unsent drafts before reloading. Check server history before retrying. Nothing is resent automatically.';
 }
 function selectBot(id) {
   if (state.botId) rememberMemoryDraft();
