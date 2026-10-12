@@ -1,0 +1,521 @@
+linux	Set up job	﻿2026-10-12T10:53:30.1235166Z Current runner version: '2.337.0'
+linux	Set up job	2026-10-12T10:53:30.1263557Z ##[group]Runner Image Provisioner
+linux	Set up job	2026-10-12T10:53:30.1264436Z Hosted Compute Agent
+linux	Set up job	2026-10-12T10:53:30.1265133Z Version: 20261002.596
+linux	Set up job	2026-10-12T10:53:30.1265803Z Commit: c3d12f3313a95f25162a1503be624f3b0617f8c0
+linux	Set up job	2026-10-12T10:53:30.1266536Z Build Date: 2026-10-02T22:28:27Z
+linux	Set up job	2026-10-12T10:53:30.1267313Z Worker ID: {b7ccb3f9-09ea-4d55-987c-e35e499a998f}
+linux	Set up job	2026-10-12T10:53:30.1268109Z Region: eastus
+linux	Set up job	2026-10-12T10:53:30.1268728Z Cloud: Azure
+linux	Set up job	2026-10-12T10:53:30.1269281Z ##[endgroup]
+linux	Set up job	2026-10-12T10:53:30.1270998Z ##[group]Operating System
+linux	Set up job	2026-10-12T10:53:30.1271792Z Ubuntu
+linux	Set up job	2026-10-12T10:53:30.1272334Z 24.04.5
+linux	Set up job	2026-10-12T10:53:30.1272837Z LTS
+linux	Set up job	2026-10-12T10:53:30.1273452Z ##[endgroup]
+linux	Set up job	2026-10-12T10:53:30.1274016Z ##[group]Runner Image
+linux	Set up job	2026-10-12T10:53:30.1274677Z Image: ubuntu-24.04
+linux	Set up job	2026-10-12T10:53:30.1275335Z Version: 20261004.327.1
+linux	Set up job	2026-10-12T10:53:30.1276398Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261004.327/images/ubuntu/Ubuntu2404-Readme.md
+linux	Set up job	2026-10-12T10:53:30.1278209Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261004.327
+linux	Set up job	2026-10-12T10:53:30.1279708Z ##[endgroup]
+linux	Set up job	2026-10-12T10:53:30.1281027Z ##[group]GITHUB_TOKEN Permissions
+linux	Set up job	2026-10-12T10:53:30.1283300Z Contents: read
+linux	Set up job	2026-10-12T10:53:30.1283955Z Metadata: read
+linux	Set up job	2026-10-12T10:53:30.1284556Z ##[endgroup]
+linux	Set up job	2026-10-12T10:53:30.1286818Z Secret source: Actions
+linux	Set up job	2026-10-12T10:53:30.1287838Z Cache mode: write
+linux	Set up job	2026-10-12T10:53:30.1288888Z Prepare workflow directory
+linux	Set up job	2026-10-12T10:53:30.1856005Z Prepare all required actions
+linux	Set up job	2026-10-12T10:53:30.1904712Z Getting action download info
+linux	Set up job	2026-10-12T10:53:30.3678873Z Download action repository 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+linux	Set up job	2026-10-12T10:53:30.4917775Z Download action repository 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+linux	Set up job	2026-10-12T10:53:30.6869210Z Complete job name: linux
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	﻿2026-10-12T10:53:30.7756501Z ##[group]Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7757736Z with:
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7758225Z   repository: Lioooooo123/chestnut
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7762170Z   token: ***
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7762631Z   ssh-strict: true
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7763076Z   ssh-user: git
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7763528Z   persist-credentials: true
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7764017Z   clean: true
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7764468Z   sparse-checkout-cone-mode: true
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7764994Z   fetch-depth: 1
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7765420Z   fetch-tags: false
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7765865Z   show-progress: true
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7766312Z   lfs: false
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7766738Z   submodules: false
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7767191Z   set-safe-directory: true
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7767702Z   allow-unsafe-pr-checkout: false
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7768497Z env:
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7768918Z   PI_OFFLINE: 1
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7769370Z   PI_SKIP_VERSION_CHECK: 1
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.7769865Z ##[endgroup]
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.8803243Z Syncing repository: Lioooooo123/chestnut
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.8806378Z ##[group]Getting Git version info
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.8807209Z Working directory is '/home/runner/work/chestnut/chestnut'
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.8808238Z [command]/usr/bin/git version
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.8928342Z git version 2.55.0
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.8953975Z ##[endgroup]
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.8971037Z Temporarily overriding HOME='/home/runner/work/_temp/e3d8f6be-e260-4d19-98f5-c5b6d5532882' before making global git config changes
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.8973348Z Adding repository directory to the temporary git global config as a safe directory
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.8977530Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/chestnut/chestnut
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9037344Z Deleting the contents of '/home/runner/work/chestnut/chestnut'
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9044196Z ##[group]Initializing the repository
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9049049Z [command]/usr/bin/git init /home/runner/work/chestnut/chestnut
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9177319Z hint: Using 'master' as the name for the initial branch. This default branch name
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9182299Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9183823Z hint: to use in all of your new repositories, which will suppress this warning,
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9185062Z hint: call:
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9185692Z hint:
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9186490Z hint: 	git config --global init.defaultBranch <name>
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9187499Z hint:
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9188567Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9190268Z hint: 'development'. The just-created branch can be renamed via this command:
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9191506Z hint:
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9192263Z hint: 	git branch -m <name>
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9193292Z hint:
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9194377Z hint: Disable this message with "git config set advice.defaultBranchName false"
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9196043Z Initialized empty Git repository in /home/runner/work/chestnut/chestnut/.git/
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9198832Z [command]/usr/bin/git remote add origin https://github.com/Lioooooo123/chestnut
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9265865Z ##[endgroup]
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9267118Z ##[group]Disabling automatic garbage collection
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9269764Z [command]/usr/bin/git config --local gc.auto 0
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9304183Z ##[endgroup]
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9305376Z ##[group]Setting up auth
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9312591Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9353691Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9761258Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:30.9801285Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:31.0031755Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:31.0070472Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:31.0302498Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:31.0344755Z ##[endgroup]
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:31.0346122Z ##[group]Fetching the repository
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:31.0355830Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +6c957bc886ab5d42c4718c7e4faacd305b4f67c4:refs/remotes/origin/main
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:32.6831502Z From https://github.com/Lioooooo123/chestnut
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:32.6833963Z  * [new ref]         6c957bc886ab5d42c4718c7e4faacd305b4f67c4 -> origin/main
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:32.6838060Z ##[endgroup]
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:32.6839284Z ##[group]Determining the checkout info
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:32.6841045Z ##[endgroup]
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:32.6842195Z [command]/usr/bin/git sparse-checkout disable
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:32.6914746Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:32.6956811Z ##[group]Checking out the ref
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:32.6960921Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:33.3286841Z Switched to a new branch 'main'
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:33.3773355Z branch 'main' set up to track 'origin/main'.
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:33.3784356Z ##[endgroup]
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:33.4245274Z [command]/usr/bin/git log -1 --format=%H
+linux	Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:53:33.4275792Z 6c957bc886ab5d42c4718c7e4faacd305b4f67c4
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	﻿2026-10-12T10:53:33.4554836Z ##[group]Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:33.4555387Z with:
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:33.4555658Z   node-version: 24.19.0
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:33.4556145Z   cache: npm
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:33.4556513Z   cache-dependency-path: package-lock.json
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	vendor/pi/package-lock.json
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:33.4557035Z   always-auth: false
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:33.4557297Z   check-latest: false
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:33.4559748Z   token: ***
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:33.4560247Z env:
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:33.4560488Z   PI_OFFLINE: 1
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:33.4560743Z   PI_SKIP_VERSION_CHECK: 1
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:33.4561018Z ##[endgroup]
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:33.5979455Z Attempting to download 24.19.0...
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:33.6090203Z (node:2291) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:33.6091311Z (Use `node --trace-deprecation ...` to show where the warning was created)
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:34.5209680Z Acquiring 24.19.0 - x64 from https://github.com/actions/node-versions/releases/download/24.19.0-30872449280/node-24.19.0-linux-x64.tar.gz
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:34.9239693Z Extracting ...
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:34.9373010Z [command]/usr/bin/tar xz --strip 1 --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/d1b11fef-6546-4850-b7fd-e063f7c8393d -f /home/runner/work/_temp/272e4999-cd1d-4b67-99ad-4baae770250d
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:36.1554575Z Adding to the cache ...
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:38.0563647Z ##[group]Environment details
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:38.3155605Z node: v24.19.0
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:38.3156001Z npm: 11.17.0
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:38.3156271Z yarn: 1.22.22
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:38.3157080Z ##[endgroup]
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:38.3175185Z [command]/opt/hostedtoolcache/node/24.19.0/x64/bin/npm config get cache
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:38.4139801Z /home/runner/.npm
+linux	Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:53:38.4897643Z npm cache is not found
+linux	Install locked dependencies without lifecycle scripts	﻿2026-10-12T10:53:38.5071759Z ##[group]Run npm ci --ignore-scripts
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:38.5072173Z ^[[36;1mnpm ci --ignore-scripts^[[0m
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:38.5072506Z ^[[36;1mnpm ci --prefix vendor/pi --ignore-scripts^[[0m
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:38.5366652Z shell: /usr/bin/bash -e {0}
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:38.5367021Z env:
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:38.5367249Z   PI_OFFLINE: 1
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:38.5367543Z   PI_SKIP_VERSION_CHECK: 1
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:38.5367829Z ##[endgroup]
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:39.2628065Z 
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:39.2638759Z added 3 packages, and audited 4 packages in 664ms
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:39.2640290Z 
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:39.2640584Z found 0 vulnerabilities
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:39.7674333Z npm warn EBADENGINE Unsupported engine {
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:39.7675191Z npm warn EBADENGINE   package: 'autoevals@0.3.0',
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:39.7675877Z npm warn EBADENGINE   required: {
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:39.7676507Z npm warn EBADENGINE     npm: 'please-use-pnpm',
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:39.7677151Z npm warn EBADENGINE     pnpm: '>=10.27.0',
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:39.7677621Z npm warn EBADENGINE     yarn: 'please-use-pnpm'
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:39.7678128Z npm warn EBADENGINE   },
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:39.7678627Z npm warn EBADENGINE   current: { node: 'v24.19.0', npm: '11.17.0' }
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:39.7680463Z npm warn EBADENGINE }
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:40.8946502Z npm warn deprecated prebuild-install@7.1.3: No longer maintained. Please contact the author of the relevant native addon; alternatives are available.
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:41.0989659Z npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:41.1412854Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:42.2220644Z npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:49.6889280Z 
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:49.6890488Z added 303 packages, and audited 327 packages in 10s
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:49.6891192Z 
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:49.6921116Z 48 packages are looking for funding
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:49.6933175Z   run `npm fund` for details
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:49.6934910Z 
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:49.6935846Z 2 high severity vulnerabilities
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:49.6936437Z 
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:49.6937074Z Some issues need review, and may require choosing
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:49.6937943Z a different dependency.
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:49.6938464Z 
+linux	Install locked dependencies without lifecycle scripts	2026-10-12T10:53:49.6938958Z Run `npm audit` for details.
+linux	Verify source and hydrate the pinned offline model catalog	﻿2026-10-12T10:53:49.7387983Z ##[group]Run npm run pi:verify
+linux	Verify source and hydrate the pinned offline model catalog	2026-10-12T10:53:49.7388320Z ^[[36;1mnpm run pi:verify^[[0m
+linux	Verify source and hydrate the pinned offline model catalog	2026-10-12T10:53:49.7388576Z ^[[36;1mnode scripts/pi-hydrate.mjs^[[0m
+linux	Verify source and hydrate the pinned offline model catalog	2026-10-12T10:53:49.7454253Z shell: /usr/bin/bash -e {0}
+linux	Verify source and hydrate the pinned offline model catalog	2026-10-12T10:53:49.7454500Z env:
+linux	Verify source and hydrate the pinned offline model catalog	2026-10-12T10:53:49.7454684Z   PI_OFFLINE: 1
+linux	Verify source and hydrate the pinned offline model catalog	2026-10-12T10:53:49.7454898Z   PI_SKIP_VERSION_CHECK: 1
+linux	Verify source and hydrate the pinned offline model catalog	2026-10-12T10:53:49.7455127Z ##[endgroup]
+linux	Verify source and hydrate the pinned offline model catalog	2026-10-12T10:53:49.8540627Z 
+linux	Verify source and hydrate the pinned offline model catalog	2026-10-12T10:53:49.8541401Z > chestnut@0.1.0 pi:verify
+linux	Verify source and hydrate the pinned offline model catalog	2026-10-12T10:53:49.8542398Z > node scripts/pi-verify-source.mjs && node scripts/pi-check-resolutions.mjs
+linux	Verify source and hydrate the pinned offline model catalog	2026-10-12T10:53:49.8543012Z 
+linux	Verify source and hydrate the pinned offline model catalog	2026-10-12T10:53:50.3681100Z Verified 2029 files at 4270522473e677ddba7b093caa0064a3df51d459; license retained.
+linux	Verify source and hydrate the pinned offline model catalog	2026-10-12T10:53:50.4032026Z Verified 14 local Pi package links; zero registry Pi package resolutions.
+linux	Verify source and hydrate the pinned offline model catalog	2026-10-12T10:53:50.5681571Z Hydrated official model catalog sha256-439c53478c84ed27a58f8b54e1c3bd45810e5a969515b4e3666a3898d51ee22f
+linux	Build the actual pinned Pi source offline	﻿2026-10-12T10:53:50.5804305Z ##[group]Run npm run build:offline --prefix vendor/pi
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:50.5804752Z ^[[36;1mnpm run build:offline --prefix vendor/pi^[[0m
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:50.5879214Z shell: /usr/bin/bash -e {0}
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:50.5879490Z env:
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:50.5879681Z   PI_OFFLINE: 1
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:50.5880090Z   PI_SKIP_VERSION_CHECK: 1
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:50.5880341Z ##[endgroup]
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:50.6969050Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:50.6969802Z > pi-monorepo@0.0.3 build:offline
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:50.6973583Z > cd packages/chord && npm run build && cd ../tui && npm run build && cd ../telemetry && npm run build && cd ../codemode && npm run build && cd ../mcp && npm run build && cd ../ai && npm run build:offline && cd ../durable && npm run build && cd ../env && npm run build && cd ../agent && npm run build && cd ../protocol && npm run build && cd ../client && npm run build && cd ../server && npm run build && cd ../coding-agent && npm run build
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:50.6975974Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:50.8700495Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:50.8721141Z > @earendil-works/chord@1.1.0 build
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:50.8721787Z > tsc -p tsconfig.build.json
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:50.8721979Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:51.3053262Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:51.3054275Z > @earendil-works/pi-tui@1.1.0 build
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:51.3055188Z > tsc -p tsconfig.build.json
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:51.3055520Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:51.8849550Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:51.8850464Z > @earendil-works/pi-telemetry@1.1.0 build
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:51.8851174Z > tsc -p tsconfig.build.json
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:51.8851485Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.1478852Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.1479665Z > @earendil-works/pi-codemode@1.1.0 build
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.1480671Z > tsc -p tsconfig.build.json
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.1480960Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.4238755Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.4239571Z > @earendil-works/pi-mcp@1.1.0 build
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.4240409Z > tsc -p tsconfig.build.json
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.7402026Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.7402090Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.7402758Z > @earendil-works/pi-ai@1.1.0 build:offline
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.7404336Z > npm run check:model-data && tsc -p tsconfig.build.json && shx rm -rf dist/providers/data && shx cp -r src/providers/data dist/providers/data
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.7405254Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.8933652Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.8934312Z > @earendil-works/pi-ai@1.1.0 check:model-data
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.8934944Z > node scripts/check-model-data.ts
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:52.8935173Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:53.0049793Z Generated model data is valid.
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:54.9708872Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:54.9709519Z > @earendil-works/pi-durable@1.1.0 build
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:54.9710234Z > tsc -p tsconfig.build.json
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:54.9710451Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:56.8117928Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:56.8118651Z > @earendil-works/pi-env@1.1.0 build
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:56.8119507Z > tsc -p tsconfig.build.json
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:56.8119710Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:57.0983886Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:57.0984615Z > @earendil-works/pi-agent-core@1.1.0 build
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:57.0985103Z > tsc -p tsconfig.build.json
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:57.0985311Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:57.5194958Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:57.5195763Z > @earendil-works/pi-protocol@1.1.0 build
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:57.5196529Z > tsc -p tsconfig.build.json
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:57.5196878Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:57.8309053Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:57.8309775Z > @earendil-works/pi-client@1.1.0 build
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:57.8310565Z > tsc -p tsconfig.build.json
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:57.8310776Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:58.1377580Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:58.1378269Z > @earendil-works/pi-server@1.1.0 build
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:58.1378735Z > tsc -p tsconfig.build.json
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:58.1378955Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:58.4659507Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:58.4660619Z > @earendil-works/pi-coding-agent@1.1.0 build
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:58.4661391Z > npm run build:unbundled && node ../../scripts/build-coding-agent-bundle.mjs
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:58.4661849Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:58.6122232Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:58.6123207Z > @earendil-works/pi-coding-agent@1.1.0 build:unbundled
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:58.6124027Z > tsc -p tsconfig.build.json && shx chmod +x dist/cli.js dist/rpc-entry.js && npm run copy-assets
+linux	Build the actual pinned Pi source offline	2026-10-12T10:53:58.6124454Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:54:01.5999325Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:54:01.6000228Z > @earendil-works/pi-coding-agent@1.1.0 copy-assets
+linux	Build the actual pinned Pi source offline	2026-10-12T10:54:01.6003292Z > shx mkdir -p dist/modes/interactive/theme && shx cp src/modes/interactive/theme/*.json dist/modes/interactive/theme/ && shx mkdir -p dist/modes/interactive/assets && shx cp src/modes/interactive/assets/*.png dist/modes/interactive/assets/ && shx mkdir -p dist/core/export-html/vendor && shx cp src/core/export-html/template.html src/core/export-html/template.css src/core/export-html/template.js dist/core/export-html/ && shx cp src/core/export-html/vendor/*.js dist/core/export-html/vendor/
+linux	Build the actual pinned Pi source offline	2026-10-12T10:54:01.6005520Z 
+linux	Build the actual pinned Pi source offline	2026-10-12T10:54:02.8167357Z Built packages/coding-agent/dist/bundle (78 files, 8.7 MiB)
+linux	Verify Pi session, RPC and tool execution contracts	﻿2026-10-12T10:54:02.8364629Z ##[group]Run npm run pi:contracts
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:02.8365072Z ^[[36;1mnpm run pi:contracts^[[0m
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:02.8431307Z shell: /usr/bin/bash -e {0}
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:02.8431578Z env:
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:02.8431760Z   PI_OFFLINE: 1
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:02.8431969Z   PI_SKIP_VERSION_CHECK: 1
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:02.8432189Z ##[endgroup]
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:02.9419263Z 
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:02.9419748Z > chestnut@0.1.0 pi:contracts
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:02.9420419Z > bash scripts/pi-contract.sh
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:02.9420624Z 
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:03.3673436Z Verified 2029 files at 4270522473e677ddba7b093caa0064a3df51d459; license retained.
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:03.5036461Z Hydrated official model catalog sha256-439c53478c84ed27a58f8b54e1c3bd45810e5a969515b4e3666a3898d51ee22f
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:03.8235708Z 
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:03.8239682Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.11 ^[[39m^[[90m/home/runner/work/chestnut/chestnut/vendor/pi/packages/coding-agent^[[39m
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:03.8240962Z 
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:11.6332553Z ^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:11.6336370Z 
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:11.6338036Z ^[[2m Test Files ^[[22m ^[[1m^[[32m4 passed^[[39m^[[22m^[[90m (4)^[[39m
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:11.6339419Z ^[[2m      Tests ^[[22m ^[[1m^[[32m18 passed^[[39m^[[22m^[[90m (18)^[[39m
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:11.6341894Z ^[[2m   Start at ^[[22m 10:54:03
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:11.6343490Z ^[[2m   Duration ^[[22m 7.78s^[[2m (transform 6.45s, setup 0ms, import 10.88s, tests 4.20s, environment 1ms)^[[22m
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:11.6344527Z 
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:12.0065501Z 
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:12.0070192Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.11 ^[[39m^[[90m/home/runner/work/chestnut/chestnut/vendor/pi/packages/agent^[[39m
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:12.0071585Z 
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:12.7117007Z ^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[32m·^[[39m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m^[[33m^[[39m^[[2m^[[90m-^[[39m^[[22m
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:12.7120492Z 
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:12.7124067Z ^[[2m Test Files ^[[22m ^[[1m^[[32m1 passed^[[39m^[[22m^[[90m (1)^[[39m
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:12.7125282Z ^[[2m      Tests ^[[22m ^[[1m^[[32m4 passed^[[39m^[[22m^[[2m | ^[[22m^[[33m34 skipped^[[39m^[[90m (38)^[[39m
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:12.7126047Z ^[[2m   Start at ^[[22m 10:54:12
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:12.7126896Z ^[[2m   Duration ^[[22m 696ms^[[2m (transform 258ms, setup 0ms, import 493ms, tests 72ms, environment 0ms)^[[22m
+linux	Verify Pi session, RPC and tool execution contracts	2026-10-12T10:54:12.7129231Z 
+linux	Check Chestnut including Linux OS locks and Unix brokers	﻿2026-10-12T10:54:12.7433441Z ##[group]Run npm run check
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:12.7433743Z ^[[36;1mnpm run check^[[0m
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:12.7494994Z shell: /usr/bin/bash -e {0}
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:12.7495246Z env:
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:12.7495428Z   PI_OFFLINE: 1
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:12.7495636Z   PI_SKIP_VERSION_CHECK: 1
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:12.7495884Z ##[endgroup]
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:12.8505895Z 
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:12.8506272Z > chestnut@0.1.0 check
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:12.8507046Z > npm run typecheck && npm test
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:12.8507506Z 
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:12.9559245Z 
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:12.9559865Z > chestnut@0.1.0 typecheck
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:12.9560645Z > tsc --noEmit
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:12.9560881Z 
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:14.9469946Z 
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:14.9470962Z > chestnut@0.1.0 test
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:14.9471352Z > node scripts/test.mjs
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:14.9471536Z 
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:15.1941375Z ✔ API handler create/chat/events/idempotency/cross-bot validation (22.901317ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:15.2023219Z ✔ API rejects DNS rebinding, cross-origin writes, non-JSON, invalid cursor and path (7.168062ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:15.2449351Z ✔ API exposes worker offline and demo status without invoking a worker (3.649668ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:15.2775516Z ✔ API preserves Chinese and emoji across split UTF-8 body chunks (2.91382ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:15.4358437Z ✔ memory API persists corrections, rejects cross-bot sources and reports stale edits without overwriting (196.666633ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:15.5233119Z ✔ maintenance API queues idempotent Dreaming and exposes sourced conflicts without running models in the API (122.70994ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:15.6378582Z ✔ persistent writable profile requires explicit experimental opt-in and Pi mode (2.242822ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:15.6383868Z ✔ maintenance Internet is not silently substituted for network none (0.37349ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:15.8493726Z ✔ OS environment mutex prevents concurrent owners until actual release (94.778446ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:16.2053784Z ✔ rapid contending flock exits are observed while descriptor closes are pending (355.897108ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:16.3676865Z ✔ holder runner transports bounded Docker commands and attached lines, then reaps attachment (162.505964ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:17.2714454Z ✔ dead parent cannot release flock before delayed lifecycle command completes and is reaped (903.48114ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:17.4846773Z ✔ dead parent causes attached exec client to be killed and reaped before unlock (213.287523ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:17.7531855Z ✔ release drains an already issued lifecycle command rather than cancelling it (268.29147ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:18.0480902Z ✔ timeout poisons and retains flock, reports prompt release failure, and requires explicit manual reconciliation (294.706291ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:18.5425806Z ✔ unexpected holder death leaves durable quarantine even while an orphan lifecycle command can finish (493.922391ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:18.8454714Z ✔ nonzero lifecycle result and output overflow fail closed with permanent quarantine (303.094204ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:18.9537097Z ✔ OS mutex isolates bot identities and rejects traversal, symlink locks, symlink directories and markers (106.953569ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.1301330Z ✔ forwards only fixed endpoint with trusted credentials and configured limits (20.276009ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.1333481Z ✔ defaults max_completion_tokens, honors lower limit and configured cap (10.951238ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.1495056Z ✔ blocks wrong paths, methods, content types and invalid or overbroad requests (22.08604ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.1634660Z ✔ allows text parts and function tools/tool-call history (2.307835ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.1675971Z ✔ caps request bodies at 2 MiB, including chunked uploads (14.595014ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.1747370Z ✔ streams SSE before upstream completion and redacts key across chunks (6.090371ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.1756140Z ✔ never forwards upstream error bodies or exception details (2.191576ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.1792469Z ✔ allows at most two concurrent upstream requests and recovers slots (4.460567ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.1805069Z ✔ aborts upstream fetch when the downstream disconnects (1.454304ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.2117174Z ✔ enforces a request timeout without exposing upstream details (30.91776ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.2167205Z ✔ Unix socket integration: private modes and idempotent cleanup (5.562462ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.2213603Z ✔ rejects existing files, socket symlinks, parent symlinks, and nonprivate directories (4.661643ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.2239620Z ✔ rejects untrusted upstream URLs before opening any listener (1.17437ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.2258537Z ✔ trusted run fence denies revoked model capability before any provider call (2.781652ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.2262539Z ✔ too-long Unix socket path fails with an actionable error before binding (0.258334ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.5499055Z ✔ agent tools read a fixed snapshot, stamp the run source and lose access after cancellation (140.943029ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.6382549Z ✔ the private Unix broker accepts bounded tool requests and revokes a running session (86.603771ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.6386856Z ✔ overlong Unix paths are refused before creating a listener (50.408513ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:19.7653749Z ✔ automatic context is bounded and selects a Chinese project lesson without injecting unrelated history (4.756452ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:20.1027911Z ✔ platform Pi tools save through the real Unix broker and repeated tool execution has one effect (188.596662ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:20.4737035Z ✔ one Git commit covers Dreaming notes, cursor, receipts; retry cannot duplicate and preferences cannot be removed (258.292357ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:23.0108357Z ✔ automatic explicit memories persist with source, incremental cursor and no duplicate after restart (204.907186ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:23.0111590Z ✔ Dreaming runs after use, preserves preferences, consolidates automatic duplicates and waits a day (301.338555ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:23.0118962Z ✔ forgotten sources cannot be paraphrased back and disabled memory does not call the provider (329.715021ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:23.0121056Z ✔ bad provenance and destructive Dreaming plans fail atomically without advancing the cursor (208.10649ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:23.0124666Z ✔ a stale inference cannot overwrite edits or commit after memory is disabled (176.944297ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:23.0130892Z ✔ two schedulers cannot infer the same batch concurrently and retries have bounded budgets (117.063666ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:23.0133976Z ✔ dirty memory is preserved and maintenance reports a recoverable blocked state (85.084721ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:23.0142719Z ✔ contradictions remain inspectable proposals instead of replacing existing preferences (200.100325ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:23.0144295Z ✔ credentials and ordinary task progress are never turned into automatic memory (187.391612ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:23.0145863Z ✔ daily budget and automatic-off configuration defer work while an explicit request can run (213.490563ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:23.0147190Z ✔ an unused bot does not keep spending daily Dreaming budget (156.400216ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:23.0151613Z ✔ a committed manual Dreaming result is recovered without replaying inference after lost ledger acknowledgment (224.336038ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:23.1748326Z ✔ outer maintenance inference uses the fixed official endpoint, bounded JSON and trusted source IDs (29.951772ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:23.1753845Z ✔ malformed, oversized, missing and upstream-error responses fail without leaking body or credentials (2.366895ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.3734424Z ✔ a saved preference has a source and Git version, and survives a new repository instance (113.930363ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.3739402Z ✔ retries do not duplicate memory and a stale correction cannot overwrite a newer one (184.151795ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.3745846Z ✔ forget removes active content and rejects an agent trying to recreate it after restart (171.419008ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.3748192Z ✔ personal preferences are shared while bot and project lessons remain scoped and memory can be turned off (558.368863ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.3756092Z ✔ uncommitted edits are kept for inspection and never become readable memory or silently committed (54.77349ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.4984134Z ✔ persistent create uses writable root and only bot workspace/model socket directory (2.607094ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.5088127Z ✔ create/start/exec then normal dispose stops entire bot without deleting rootfs (14.849724ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.5154922Z ✔ next task reuses stopped container identity and starts no additional container (4.855058ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.5156960Z ✔ saved security and image configuration are checked rather than labels alone (1.63845ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.5195645Z ✔ stale owner cannot stop a newer run on the same persistent container (3.940628ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.5248028Z ✔ cleanup requires a current outer fencing guard and verified Docker stopped state (4.646236ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.5299162Z ✔ persistent mount rejects files that could expose host credentials (5.349764ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.5348061Z ✔ recorded container identity forbids silent replacement or missing-rootfs recovery (4.877178ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.5392144Z ✔ native filesystem validation rejects the mock regular file as a real socket (4.262667ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.5447650Z ✔ persistent gateway path rejects symlink indirection before any container is created (4.497337ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.5488533Z ✔ accepted cancellation denies create/start/exec while retaining cleanup authority (5.003793ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.5546802Z ✔ cancellation after create prevents start and leaves the writable rootfs stopped (5.609902ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:24.5590461Z ✔ unsupported cgroups block launch while trusted cleanup remains available (4.724963ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:27.0447135Z ✔ persistent launch failure before transport still requires host stop; unknown cleanup quarantines (2311.384618ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:27.5756899Z ✔ persistent finally stop sees recorded immutable identity and preserves environment record (531.104689ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:28.0665528Z ✔ persistent startup/readiness failure is an unknown outcome even before prompt dispatch (490.48472ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:28.5841164Z ✔ persistent old guest is stopped before a new gateway capability is published (517.907656ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:28.6978801Z ✔ RPC ACK and agent_end do not settle the run; only agent_settled does (6.767378ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:28.7007307Z ✔ handled prompt does not hang or count as a completed agent run (1.813578ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:28.7278047Z ✔ steer is acknowledged once, with no implicit replay on lost ACK (27.030882ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:28.7287358Z ✔ transport close rejects active run and never resends prompt (1.433967ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:28.7411503Z ✔ cancel sends all abort controls and destroys container (12.937401ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:28.7483367Z ✔ fake demo is deterministic and marks events as demonstration (6.103497ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:28.7485432Z ✔ readiness is acknowledged before lease fence permits prompt (0.716482ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:28.7488969Z ✔ event sink failure rejects run for fenced disposal instead of crashing host (0.279854ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:28.7596496Z ✔ failed sandbox cleanup rejects cancellation and remains retryable (10.933987ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:28.7758226Z ✔ lost prompt ACK and no settlement remain uncertain with one dispatch and no replay (16.41083ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.4407645Z ✔ complete official Pi source checksum and pinned model catalog are reproducible (460.691667ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.4415684Z ✔ actual Pi imports resolve to vendored source, without registry runtime fallback (113.40839ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.5330783Z ✔ concurrent stop callers share pending cleanup and both receive failure (1.438555ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.5351622Z ✔ background stop plus dispose cannot report success before verified cleanup (0.255078ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.6431269Z ✔ requires actual Docker rootless security option (1.394984ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.6444119Z ✔ sandbox policy disables external network, privileges, and host secret mounts (0.637695ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.6449692Z ✔ command and mount injection rejected (0.401483ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.6451195Z ✔ resource-control admission requires systemd cgroup v2 and every enforced quota (0.332353ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.7874539Z ✔ idempotent messages return same task and reject changed contents (4.294526ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.7883782Z ✔ tasks and commands are bot addressed; traversal is rejected (1.553982ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.7887642Z ✔ global concurrency and per-bot mutation lock, fencing (2.266466ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.7903594Z ✔ steer is durable, not applied on ack; follow-up waits for predecessor (2.279992ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.7905049Z ✔ cancel clears pending steering and queued follow-ups; no new run (2.439219ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.7906541Z ✔ expired run is interrupted and never replayed; sending commands uncertain (2.398234ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.7908070Z ✔ live worker distinguishable from stale without treating PID as authority (1.304374ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.7909571Z ✔ events and outbox are committed together; cursor supports repeated polling (1.247678ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.7911458Z ✔ recovery quarantines environment until trusted cleanup, then permits unrelated new work (2.148475ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.7913204Z ✔ follow-up of cancelled/interrupted task is rejected instead of permanently queued (1.438986ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.7914609Z ✔ unverified disposal quarantines even a settled run (1.487947ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.7916140Z ✔ model/tool admission denies cancelling or stale runs even while cleanup owns lease (1.404862ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:29.7917868Z ✔ persistent bot root identity is durable and cannot silently change profile or container (1.308532ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:31.5161347Z ✔ demo worker runs durable bot task, steering, queued follow-up and final result (1534.266335ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:32.0079653Z ✔ cancel waits for cleanup, cancels pending follow-up and emits terminal cancelled (491.19571ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:32.5231553Z ✔ settlement containing model error is failed, never successful (515.602195ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:32.8744816Z ✔ demo worker restart interrupts stale task without replay and can run independent new task (351.244167ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:32.8767833Z ✔ mode directories cannot mix demo and real runs (2.527014ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:33.3923854Z ✔ a successful Pi retry clears a prior model error (515.201135ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:34.1360308Z ✔ lost transport after prompt dispatch is interrupted and dependent work never runs (743.451805ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:34.8782253Z ✔ cancellation preempts a pending steer ACK (742.122634ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:35.1480404Z ✔ shutdown during adapter preparation never submits a prompt (269.53387ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:35.9638417Z ✔ worker injects scoped memory with a pinned commit and the next task sees a correction (815.78481ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.6573585Z ✔ background maintenance learns after settlement and the next task uses the committed memory (1693.532361ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8448077Z ✔ empty workspace and create/select bot (10.121531ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8449424Z ✔ repeated task submit sends once and includes a UUID (22.217851ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8451139Z ✔ failed submission preserves draft and retry reuses message ID (4.987083ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8453003Z ✔ changing the draft after a failed send generates a new message ID (5.050692ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8458485Z ✔ steer is running-only and follow-up creates a new task (9.076082ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8476992Z ✔ cancellation stays pending until backend confirms; terminal follow-up is disabled (6.577752ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8478610Z ✔ events are incremental, ordered, and do not imply completion (5.253752ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8480635Z ✔ errors and untrusted task names use plain text; draft survives navigation (7.575601ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8483665Z ✔ quarantine and offline-worker states are visible without false completion (9.322043ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8485278Z ✔ network failure keeps existing history and offers retry (5.896836ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8486699Z ✔ hidden pages do not schedule polling; visibility resumes it (2.13513ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8488796Z ✔ failed commands preserve text and reuse the message ID on retry (6.920013ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8490369Z ✔ a stale task response cannot overwrite a newer bot selection (7.831942ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8493151Z ✔ memory editor saves safely, keeps a conflicting draft, and forget waits for confirmation (6.334376ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8495061Z ✔ a settings draft keeps the version it was read from when another session changes memory (3.469079ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8497583Z ✔ Dreaming status and proposals are visible, requests deduplicate and dismiss never edits preferences (4.442181ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8499382Z ✔ a failed Dreaming request stays visible and retry keeps the request ID (6.387153ms)
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8588677Z ℹ tests 134
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8589164Z ℹ suites 0
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8589552Z ℹ pass 134
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8590165Z ℹ fail 0
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8590605Z ℹ cancelled 0
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8591026Z ℹ skipped 0
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8591418Z ℹ todo 0
+linux	Check Chestnut including Linux OS locks and Unix brokers	2026-10-12T10:54:37.8591862Z ℹ duration_ms 22851.908379
+linux	Exercise the independent model-less Worker	﻿2026-10-12T10:54:37.8818652Z ##[group]Run npm run demo
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:37.8818950Z ^[[36;1mnpm run demo^[[0m
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:37.8881076Z shell: /usr/bin/bash -e {0}
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:37.8881333Z env:
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:37.8881519Z   PI_OFFLINE: 1
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:37.8881731Z   PI_SKIP_VERSION_CHECK: 1
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:37.8881956Z ##[endgroup]
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:37.9922248Z 
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:37.9922891Z > chestnut@0.1.0 demo
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:37.9923440Z > node scripts/demo.mjs
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:37.9923657Z 
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:38.0991882Z MODEL-LESS DEMO: no AI, agent shell, provider calls, or containers. Real API and browser are not exercised.
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:38.2761649Z Chestnut worker c7eab07f-f661-49a8-a71d-7d900808c08c (demo, concurrency 1)
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:38.3071639Z Steering persisted; queued follow-up remains separate.
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5283196Z {
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5283663Z   "first": "succeeded",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5284074Z   "followUp": "succeeded",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5285534Z   "result": "Demo result: Previous task context:\nOrganize this demo task\nPrevious result:\nDemo result: Organize this demo task\n\nNew user follow-up:\nContinue with a summary",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5286693Z   "events": [
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5286938Z     "task.queued",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5287182Z     "task.running",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5287446Z     "command.steer.accepted",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5287744Z     "memory.loaded",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5288265Z     "pi.response",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5288510Z     "pi.agent_start",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5288768Z     "pi.response",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5289015Z     "pi.queue_update",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5289314Z     "command.sent_unconfirmed",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5289613Z     "pi.message_end",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5290061Z     "pi.agent_end",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5290318Z     "pi.agent_settled",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5290582Z     "task.succeeded",
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5290833Z     "memory.maintained"
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5291079Z   ]
+linux	Exercise the independent model-less Worker	2026-10-12T10:54:43.5291279Z }
+linux	Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	﻿2026-10-12T10:54:43.7241686Z Post job cleanup.
+linux	Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:54:43.8499151Z (node:5605) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+linux	Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:54:43.8500593Z (Use `node --trace-deprecation ...` to show where the warning was created)
+linux	Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:54:43.8716573Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/chestnut/chestnut --files-from manifest.txt --use-compress-program zstdmt
+linux	Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:54:44.2637544Z (node:5605) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+linux	Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:54:45.2544112Z Sent 75235328 of 126990721 (59.2%), 71.8 MBs/sec
+linux	Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:54:46.2545563Z Sent 120848384 of 126990721 (95.2%), 57.6 MBs/sec
+linux	Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:54:46.9989386Z Sent 126990721 of 126990721 (100.0%), 44.1 MBs/sec
+linux	Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020	2026-10-12T10:54:47.0984871Z Cache saved with the key: node-cache-Linux-x64-npm-8513aebf62cee7350d895d1b3155ecf1baecaaeb684715e7fe7a91c38f26e538
+linux	Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	﻿2026-10-12T10:54:47.1149590Z Post job cleanup.
+linux	Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:54:47.2009556Z [command]/usr/bin/git version
+linux	Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:54:47.2054532Z git version 2.55.0
+linux	Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:54:47.2094097Z Temporarily overriding HOME='/home/runner/work/_temp/0befd88f-4609-441e-9812-c6946acb7407' before making global git config changes
+linux	Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:54:47.2095616Z Adding repository directory to the temporary git global config as a safe directory
+linux	Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:54:47.2099152Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/chestnut/chestnut
+linux	Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:54:47.2138761Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+linux	Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:54:47.2179555Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+linux	Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:54:47.2444413Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+linux	Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:54:47.2473995Z http.https://github.com/.extraheader
+linux	Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:54:47.2489662Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+linux	Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:54:47.2527045Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+linux	Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:54:47.2796051Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+linux	Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262	2026-10-12T10:54:47.2832214Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+linux	Complete job	﻿2026-10-12T10:54:47.3237309Z Cleaning up orphan processes
+linux	Complete job	2026-10-12T10:54:47.3708430Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

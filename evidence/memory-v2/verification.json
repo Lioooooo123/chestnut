@@ -46,5 +46,24 @@
     "web/app.js": "30edb6e15d79b640bc3ce8217b2150fc3fd39bab86869070360b46a9dd1f75a6",
     "web/index.html": "824879d6fb5142dff722d46e981f4ee541633a7d20958203e0c0a99451c385e9",
     "web/styles.css": "3968daeac743b346bca535184da55c5c4d7e56bd7aa33a52df5c91a1bd9e0b69"
+  },
+  "ci": {
+    "url": "https://github.com/Lioooooo123/chestnut/actions/runs/38239135559",
+    "implementationCommit": "6c957bc886ab5d42c4718c7e4faacd305b4f67c4",
+    "conclusion": "success",
+    "os": "ubuntu-24.04",
+    "node": "24.19.0",
+    "check": {
+      "total": 134,
+      "pass": 134,
+      "fail": 0,
+      "skip": 0
+    },
+    "pi": "actual pinned source offline build and focused source contracts passed; no inference",
+    "evidence": [
+      "ci.json",
+      "ci.log"
+    ],
+    "boundary": "Linux OS-lock fixtures use fake Docker commands; this does not prove real rootless Docker or VPS isolation"
   }
 }

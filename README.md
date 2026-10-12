@@ -124,3 +124,5 @@ curl -s -H 'Content-Type: application/json' -d '{"messageId":"<uuid>","prompt":"
 - Demo 不调用模型，只从明确“Remember:”或“记住：”中保留偏好。Pi 使用外层模型凭据做来源绑定的提炼。
 
 完整存储、并发、忘记和维护契约见 [memory-design.md](docs/memory-design.md)。真实模型、跨容器 socket 和 Linux/VPS 运行仍需对应环境验收。
+
+Linux CI 使用 Node 24、固定 Pi 源码和离线模型目录，运行 Pi 构建、选定源代码合约、Chestnut 完整检查及独立 Worker 演示。该流程验证 Linux 锁与 Unix socket 行为；容器 daemon、真实模型和 VPS 部署仍使用各自的实机验收。
