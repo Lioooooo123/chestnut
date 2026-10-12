@@ -1,0 +1,83 @@
+{
+  "verified_at": "2026-10-12T09:32:46.330808+00:00",
+  "source_state": "local working tree",
+  "base_commit": "fa3fb514cc8bae75157ef189c4f042d94855a43f",
+  "source_sha256": {
+    "README.md": "32eeda81004ce7cbd1aea08fd2409714f128f6b73a47e6729256dc554b9ec7f8",
+    "docs/memory-design.md": "a6a45d690f086c19fcca40c74fe9428be89309dd5a42ab58b68831e1d4e6e5a7",
+    "src/api.ts": "9d8400af87aa3d32fbb6debf235b473c71d4625333cf801582cfe50ee99d96f4",
+    "src/cli.ts": "aa3eaa7016df42588678e875b79e5a6d3db1e9f61f4c26ad0edbc1920ac60bbc",
+    "src/memory/broker.ts": "0ab8aca1fe2d9f63317509cef0c70b7b41a7fba04d16780d834f54371915b44f",
+    "src/memory/context.ts": "5c1ced1cc179584f7cd4e4191d5d62427483d47b12c3115816f5b9e713fe2136",
+    "src/memory/pi-extension.mjs": "e30e7a5025ec69990864ba3758a77dda50d5689a3a81adf33895c4783073a14a",
+    "src/memory/repository.ts": "2b1150de00924ee78b1f8ca9677ba40129c55d1697bc21d6ff766078f42ff166",
+    "src/pi/fake-adapter.ts": "1568de6be8d997c2acc9b3d535ad97450ef370d62d7ad4f73eaca21d9829e2f1",
+    "src/pi/types.ts": "6a68f90e3121adb9dd2f4e4700cb2c8385b882c084de811dcd8eba173c0dd96a",
+    "src/sandbox/Dockerfile": "c5a551683d61dc048cb5c1a4cfc89b60e129e88067a2a739531cbf4eb5b4cbd5",
+    "src/sandbox/container-entry.mjs": "fc5f031e3cddd6abe8c8a9e9362e0cf14c2b9ba0b708312fe7dccbbc3180bacf",
+    "src/sandbox/persistent-task-entry.mjs": "34bb51cb756d7a57fb1973a3323fc648c830e234162b693afe00b999c14653bd",
+    "src/worker.ts": "7bf2392247e57dd69093585938a31b1ff1fcc6e94b8123b0005ac9e79e640b57",
+    "tests/api.test.ts": "048d891184f989fe0422ad08aa9a4c382674a5e984dc2eb1382fba4c0d1d7ddd",
+    "tests/memory-broker.test.ts": "d6cd0cf283b6efd6d16fd765ab0c893bf74fd6c1eebc9f0f57c4a06b8ebd0d11",
+    "tests/memory-context.test.ts": "eb2bc0ea3071d06ef718adbc7ec8fc110cdd3c4cff9473e1e81536d734118fc7",
+    "tests/memory-extension.test.ts": "0e1ef6578046a2c04589768d6e5937ae00dedd74178b42c96e0f5305efdae08c",
+    "tests/memory.test.ts": "4ee85aa67f144795697b7ec6cd39ef5121abfe50367027b2f0c9f721260752b1",
+    "tests/persistent-worker.test.ts": "105a21b4402fbef9270b02cd41d9d47af54036774ea70d551c61f47bb96aeca2",
+    "tests/worker.test.ts": "5a344ea83e17cfcbe1953badaccd70558f884c9643519c22c72a17b7ae9acb32",
+    "web/app.js": "9f00ca79f86935ec4cd6d4e8b7b3593ea505e3705d4b0af614ea70c844f7dec8",
+    "web/dashboard.test.cjs": "df34e8f232ce4fc7025ebf70c60eb7353200bcc08f71625d19d4b75241290f30",
+    "web/index.html": "6b574c5989a6cef7959a89a8369eb8986a082d903953a85e291dfac9c8fcaeab",
+    "web/styles.css": "8e851e53e5ec75e0fdc2a9ef6681d7146a694fdd52d4786b2485f85f01b46e1d"
+  },
+  "local_checks": {
+    "typecheck": "passed",
+    "tests": 115,
+    "passed": 105,
+    "failed": 0,
+    "skipped": 10,
+    "skip_reason": "Existing Linux util-linux flock and /proc tests are not available on macOS",
+    "demo": "passed"
+  },
+  "integration": {
+    "real_local_git": "passed",
+    "concurrent_independent_node_writers": "passed; both notes retained",
+    "unix_memory_broker": "passed; revoked task access refused",
+    "pi_source_extension_loader": "passed; 5 platform tools registered and schema validated"
+  },
+  "browser": {
+    "engine": "Codex in-app browser",
+    "url": "http://127.0.0.1:4317/",
+    "data": "Explicitly labeled sample data in model-less demo mode",
+    "flows": [
+      "create memory",
+      "correct memory",
+      "Chinese search and punctuation preservation",
+      "personal/project/bot scope isolation",
+      "forget confirmation",
+      "disable memory and complete a task without it",
+      "reenable memory and inspect loaded entries",
+      "settings draft survives polling and focus changes",
+      "reload settings"
+    ],
+    "narrow_viewport": {
+      "width": 390,
+      "height": 844,
+      "document_width": 390
+    },
+    "screenshots": [
+      "desktop.jpg",
+      "mobile.jpg",
+      "history.jpg"
+    ]
+  },
+  "not_verified": [
+    "Live Linux rootless Docker image and guest socket interoperability",
+    "Real model inference and model-driven memory tools",
+    "VPS deployment",
+    "Human QA"
+  ],
+  "next_phase": [
+    "Automatic lesson extraction",
+    "Scheduled Dreaming"
+  ]
+}

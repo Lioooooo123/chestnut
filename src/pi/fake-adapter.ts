@@ -16,7 +16,7 @@ export class FakeAdapter implements WorkerAdapter {
     await new Promise<void>(resolve => {
       this.resolve = resolve;
       this.timer = setTimeout(() => {
-        const text = `Demo result: ${input.prompt}`;
+        const text = `Demo result: ${input.displayPrompt ?? input.prompt}`;
         onEvent({ type: 'message_update', data: { assistantMessageEvent: { type: 'text_delta', delta: text } } });
         onEvent({ type: 'message_end', data: { message: { role: 'assistant', content: [{ type: 'text', text }] } } });
         onEvent({ type: 'agent_end', data: { demo: true } });

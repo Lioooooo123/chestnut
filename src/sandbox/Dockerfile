@@ -14,6 +14,7 @@ COPY --from=build /opt/pi /opt/pi
 COPY src/sandbox/container-entry.mjs /opt/chestnut/container-entry.mjs
 COPY src/sandbox/persistent-supervisor.mjs /opt/chestnut/persistent-supervisor.mjs
 COPY src/sandbox/persistent-task-entry.mjs /opt/chestnut/persistent-task-entry.mjs
+COPY src/memory/pi-extension.mjs /opt/chestnut/memory-extension.mjs
 WORKDIR /workspace
 ENV HOME=/tmp/home PI_CODING_AGENT_DIR=/tmp/pi-agent PI_OFFLINE=1 PI_NO_UPDATE_CHECK=1
 # UID 0 is namespaced by verified rootless Docker, never host root.

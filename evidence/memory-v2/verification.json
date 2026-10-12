@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-12T10:51:50.209749+00:00",
+  "local": {
+    "node": "v26.5.0",
+    "check": {
+      "total": 134,
+      "pass": 124,
+      "fail": 0,
+      "skip": 10,
+      "skipReason": "Linux util-linux flock and /proc require Linux"
+    },
+    "demo": "passed; distinct Worker process and SQLite, no model or shell",
+    "provider": "protocol tests with injected transport; no paid inference"
+  },
+  "browser": {
+    "url": "http://127.0.0.1:4317/",
+    "engine": "Codex in-app browser",
+    "verified": [
+      "explicit request task -> automatic sourced Bot memory",
+      "manual Dreaming queued and completed",
+      "memory survives Worker restart",
+      "desktop layout",
+      "390px layout has documentWidth=viewportWidth=390, Dream now target=40px"
+    ],
+    "screenshots": [
+      "desktop.jpg",
+      "mobile.jpg"
+    ]
+  },
+  "notRun": [
+    "live model inference (no configured credential)",
+    "rootless Docker daemon and guest socket (daemon not running)",
+    "real container rootfs/process persistence",
+    "VPS deployment"
+  ],
+  "sourceSha256": {
+    "src/api.ts": "a1ccc497555255e8de341082d5fd23892ebc43b46fd4b59c33415e5fb51407fb",
+    "src/config.ts": "c3839f380fd248274f5dd69abad1a0433e451074770ae696eb759295a49a2e7d",
+    "src/memory/broker.ts": "0ab8aca1fe2d9f63317509cef0c70b7b41a7fba04d16780d834f54371915b44f",
+    "src/memory/context.ts": "5c1ced1cc179584f7cd4e4191d5d62427483d47b12c3115816f5b9e713fe2136",
+    "src/memory/maintenance.ts": "1033a7279b678237fb51845f10a69334a95c3e2aa4a6afb25d497d26aa6fc70c",
+    "src/memory/pi-extension.mjs": "e30e7a5025ec69990864ba3758a77dda50d5689a3a81adf33895c4783073a14a",
+    "src/memory/provider.ts": "b745c12c007a045e2d72bb2b85ae2105b671efeafa30eb6fb682fd442a3ce19b",
+    "src/memory/repository.ts": "e2d3e1d0daad7a563a26243d592e7b73b75d5e597b8734b9bb836167814ed3d9",
+    "src/worker.ts": "15f003f980a4ba71648c6d2ac62307f25ab4f91cb93c6a17b5a1f632564c73e3",
+    "web/app.js": "30edb6e15d79b640bc3ce8217b2150fc3fd39bab86869070360b46a9dd1f75a6",
+    "web/index.html": "824879d6fb5142dff722d46e981f4ee541633a7d20958203e0c0a99451c385e9",
+    "web/styles.css": "3968daeac743b346bca535184da55c5c4d7e56bd7aa33a52df5c91a1bd9e0b69"
+  }
+}

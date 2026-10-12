@@ -5,10 +5,14 @@ import { join } from 'node:path';
 import { Store } from './store.ts';
 import { AppError } from './types.ts';
 import { type Config } from './config.ts';
+import { MemoryMaintenance } from './memory/maintenance.ts';
+import { MemoryRepository, type SaveMemory, type UpdateMemory } from './memory/repository.ts';
 const webRoot=fileURLToPath(new URL('../web/',import.meta.url));
 function send(res:ServerResponse,status:number,data:unknown) {res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(data));}
 async function body(req:IncomingMessage) { if(!req.headers['content-type']?.startsWith('application/json'))throw new AppError(415,'Use application/json'); req.setEncoding('utf8'); let text=''; for await(const chunk of req){text+=chunk; if(Buffer.byteLength(text)>65536)throw new AppError(413,'Request too large');} try {const parsed=JSON.parse(text); if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw 0; return parsed as Record<string,unknown>;}catch{throw new AppError(400,'Invalid JSON object');} }
 export function createApi(store:Store,c:Config) {
+  let memory: MemoryRepository | undefined;
+  let maintenance: MemoryMaintenance | undefined;
   return createServer(async(req,res)=>{
     try {
       const host=req.headers.host ?? ''; const expectedPort=(res.socket?.localPort ?? c.port); const allowedHost=c.host==='::1'?`[::1]:${expectedPort}`:`${c.host}:${expectedPort}`;
@@ -27,6 +31,28 @@ export function createApi(store:Store,c:Config) {
       }
       const envMatch=/^\/api\/bots\/([^/]+)\/environment$/.exec(url.pathname);
       if(envMatch&&req.method==='GET'){send(res,200,store.environment(envMatch[1]!));return;}
+      const memoryMatch = /^\/api\/bots\/([^/]+)\/memory(?:\/([^/]+))?$/.exec(url.pathname);
+      if (memoryMatch) {
+        const [, botId, id] = memoryMatch; store.bot(botId!);
+        memory ??= new MemoryRepository(join(c.root, 'control', 'memory'));
+        if (id === 'maintenance') {
+          maintenance ??= new MemoryMaintenance(store,c);
+          if (req.method === 'GET') { send(res,200,{ job: maintenance.status(botId!), progress: memory.maintenanceState(botId!) }); return; }
+          const b = await body(req);
+          if (req.method === 'POST') { if (!memory.snapshot(botId!).enabled) throw new AppError(409,'Memory is turned off'); send(res,202,maintenance.requestDream(botId!,b.requestId as string)); return; }
+          if (req.method === 'DELETE') { memory.dismissConflict(botId!,b.id as string,b.requestId as string); send(res,200,{ progress: memory.maintenanceState(botId!) }); return; }
+          throw new AppError(405,'Method not allowed');
+        }
+        if (!id && req.method === 'GET') { const query = url.searchParams.get('q') ?? ''; if (query.length > 300) throw new AppError(400, 'Memory search is too long'); send(res, 200, memory.snapshot(botId!, query)); return; }
+        if (['POST', 'PATCH', 'DELETE'].includes(req.method ?? '')) {
+          const b = await body(req);
+          if (b.sourceTaskId !== undefined) store.task(botId!, b.sourceTaskId as string);
+          if (!id && req.method === 'POST') { const changed = memory.save(botId!, { requestId: b.requestId as string, title: b.title as string, content: b.content as string, scope: b.scope as SaveMemory['scope'], kind: b.kind as SaveMemory['kind'], ...(b.sourceTaskId ? { sourceTaskId: b.sourceTaskId as string } : {}) }); send(res, changed.replayed ? 200 : 201, changed); return; }
+          if (id === 'settings' && req.method === 'PATCH') { send(res, 200, memory.settings(botId!, { requestId: b.requestId as string, expectedVersion: b.expectedVersion as string, project: b.project as string | null, enabled: b.enabled as boolean })); return; }
+          if (id && req.method === 'PATCH') { send(res, 200, memory.update(botId!, id, { requestId: b.requestId as string, expectedRevision: b.expectedRevision as string, title: b.title as string, content: b.content as string, ...(b.sourceTaskId ? { sourceTaskId: b.sourceTaskId as string } : {}) } as UpdateMemory)); return; }
+          if (id && req.method === 'DELETE') { send(res, 200, memory.forget(botId!, id, { requestId: b.requestId as string, expectedRevision: b.expectedRevision as string })); return; }
+        }
+      }
       const m=/^\/api\/bots\/([^/]+)\/tasks(?:\/([^/]+)(?:\/(events|commands))?)?$/.exec(url.pathname);
       if(m){const [,botId,taskId,action]=m;
         if(!taskId && req.method==='GET'){send(res,200,store.tasks(botId!));return;}

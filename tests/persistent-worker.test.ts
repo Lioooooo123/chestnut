@@ -14,7 +14,7 @@ async function fixture(factory:AdapterFactory,deps:WorkerDependencies={}){
   // This fixture stubs every gateway/Docker operation; use a canonical local directory
   // so macOS can exercise Worker state transitions without claiming Linux transport coverage.
   c.gatewayRoot=join(root,'mock-gateways');prepareStorage(c);const s=new Store(c.dbPath),b=s.createBot('Persistent test');
-  const worker=new Worker(s,c,factory,{acquireLock:async()=>{let held=true;return{isHeld:()=>held,release:async()=>{held=false;},runner:{command:async()=>{throw new Error('No real Docker allowed in test');},attach:()=>{throw new Error('No real Docker allowed in test');}}};},gateway:async()=>({close:async()=>{}}),cleanupPersistent:async()=>{},...deps});
+  const worker=new Worker(s,c,factory,{acquireLock:async()=>{let held=true;return{isHeld:()=>held,release:async()=>{held=false;},runner:{command:async()=>{throw new Error('No real Docker allowed in test');},attach:()=>{throw new Error('No real Docker allowed in test');}}};},gateway:async()=>({close:async()=>{}}),memoryBroker:async()=>({close:async()=>{}}),cleanupPersistent:async()=>{},...deps});
   const running=worker.run();return{s,b,async close(){await worker.stop();await running;s.close();await rm(root,{recursive:true,force:true});await rm(c.gatewayRoot,{recursive:true,force:true});}};
 }
 test('persistent launch failure before transport still requires host stop; unknown cleanup quarantines',async()=>{

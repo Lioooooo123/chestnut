@@ -2,6 +2,7 @@
 import { createServer, request } from 'node:http';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 
 const model = process.env.CHESTNUT_MODEL;
 const sessionPath = process.argv[2];
@@ -27,11 +28,14 @@ await writeFile('/tmp/pi-agent/models.json', JSON.stringify({ providers: { chest
   models: [{ id: model, name: model, reasoning: false, input: ['text'], contextWindow: 128000, maxTokens: 8192,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, compat: { supportsDeveloperRole: false, supportsStore: false } }],
 } } }), { mode: 0o600 });
+const memorySocket = '/run/chestnut/memory.sock';
+const memoryArgs = existsSync(memorySocket) ? ['--extension', '/opt/chestnut/memory-extension.mjs'] : [];
 const child = spawn('node', [
   '/opt/pi/packages/coding-agent/dist/bundle/rpc-entry.js', '--provider', 'chestnut', '--model', model,
   '--session', sessionPath, '--session-dir', '/session',
   '--no-extensions', '--no-mcp', '--no-skills', '--no-prompt-templates', '--no-themes', '--no-context-files', '--no-approve',
-], { stdio: 'inherit', shell: false });
+  ...memoryArgs,
+], { stdio: 'inherit', shell: false, env: { ...process.env, CHESTNUT_MEMORY_SOCKET: memoryArgs.length ? memorySocket : undefined } });
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => child.kill(signal));
 child.on('error', () => { relay.close(); process.exitCode = 1; });
 child.on('exit', code => { relay.close(); process.exitCode = code ?? 1; });

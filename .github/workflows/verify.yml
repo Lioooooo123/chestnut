@@ -1,0 +1,45 @@
+name: Verify Chestnut
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/**', 'src/**', 'tests/**', 'web/**', 'scripts/**', 'vendor/**', 'package*.json', 'tsconfig.json']
+  pull_request:
+    paths: ['.github/workflows/**', 'src/**', 'tests/**', 'web/**', 'scripts/**', 'vendor/**', 'package*.json', 'tsconfig.json']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PI_OFFLINE: '1'
+      PI_SKIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vendor/pi/package-lock.json
+      - name: Install locked dependencies without lifecycle scripts
+        run: |
+          npm ci --ignore-scripts
+          npm ci --prefix vendor/pi --ignore-scripts
+      - name: Verify source and hydrate the pinned offline model catalog
+        run: |
+          npm run pi:verify
+          node scripts/pi-hydrate.mjs
+      - name: Build the actual pinned Pi source offline
+        run: npm run build:offline --prefix vendor/pi
+      - name: Verify Pi session, RPC and tool execution contracts
+        run: npm run pi:contracts
+      - name: Check Chestnut including Linux OS locks and Unix brokers
+        run: npm run check
+      - name: Exercise the independent model-less Worker
+        run: npm run demo

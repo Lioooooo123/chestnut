@@ -9,8 +9,9 @@ import { Store } from '../src/store.ts';
 import { config,prepareStorage } from '../src/config.ts';
 import { Worker,type AdapterFactory } from '../src/worker.ts';
 import { FakeAdapter } from '../src/pi/fake-adapter.ts';
+import { MemoryRepository } from '../src/memory/repository.ts';
 async function until(fn:()=>boolean){const end=Date.now()+5000;while(!fn()){if(Date.now()>end)throw new Error('Timed out');await sleep(20);}}
-async function fixture(factory?:AdapterFactory){const root=await mkdtemp(join(tmpdir(),'chestnut-test-'));const c=config({CHESTNUT_DATA_DIR:root,CHESTNUT_MODE:'demo'});prepareStorage(c);const s=new Store(c.dbPath),b=s.createBot('Test'),w=new Worker(s,c,factory ?? (()=>new FakeAdapter({delayMs:450})));const running=w.run();return{s,b,w,async close(){await w.stop();await running;s.close();await rm(root,{recursive:true,force:true});}};}
+async function fixture(factory?:AdapterFactory){const root=await mkdtemp(join(tmpdir(),'chestnut-test-'));const c=config({CHESTNUT_DATA_DIR:root,CHESTNUT_MODE:'demo'});prepareStorage(c);const s=new Store(c.dbPath),b=s.createBot('Test'),w=new Worker(s,c,factory ?? (()=>new FakeAdapter({delayMs:450})));const running=w.run();return{s,b,w,c,async close(){await w.stop();await running;s.close();await rm(root,{recursive:true,force:true});}};}
 test('demo worker runs durable bot task, steering, queued follow-up and final result',async()=>{const f=await fixture();try{const t=f.s.submit(f.b.id,randomUUID(),'hello');await until(()=>f.s.task(f.b.id,t.id).state==='running');f.s.command(f.b.id,t.id,randomUUID(),'steer','be concise');const follow=f.s.command(f.b.id,t.id,randomUUID(),'follow_up','next');await until(()=>f.s.task(f.b.id,follow.id).state==='succeeded');assert.match(f.s.task(f.b.id,t.id).result!,/Demo result: hello/);assert.ok(f.s.events(f.b.id,t.id).some(e=>e.type==='command.sent_unconfirmed'));assert.match(f.s.task(f.b.id,follow.id).result!,/New user follow-up:/);assert.equal(f.s.workerStatus().online,true);}finally{await f.close();}});
 test('cancel waits for cleanup, cancels pending follow-up and emits terminal cancelled',async()=>{const f=await fixture(()=>new FakeAdapter({delayMs:5000}));try{const t=f.s.submit(f.b.id,randomUUID(),'long');await until(()=>f.s.task(f.b.id,t.id).state==='running');const next=f.s.command(f.b.id,t.id,randomUUID(),'follow_up','next');f.s.command(f.b.id,t.id,randomUUID(),'cancel');await until(()=>f.s.task(f.b.id,t.id).state==='cancelled');assert.equal(f.s.task(f.b.id,next.id).state,'cancelled');assert.equal(f.s.quarantines().length,0);}finally{await f.close();}});
 test('settlement containing model error is failed, never successful',async()=>{const f=await fixture(()=>({async start(_i,emit){emit({type:'message_end',data:{message:{role:'assistant',content:[],stopReason:'error',errorMessage:'Model rejected'}}});emit({type:'agent_settled',data:{aborted:false}});},async steer(){},async cancel(){},async dispose(){}}));try{const t=f.s.submit(f.b.id,randomUUID(),'hello');await until(()=>f.s.task(f.b.id,t.id).state==='failed');assert.equal(f.s.task(f.b.id,t.id).error,'Model rejected');}finally{await f.close();}});
@@ -20,3 +21,36 @@ test('a successful Pi retry clears a prior model error',async()=>{const f=await 
 test('lost transport after prompt dispatch is interrupted and dependent work never runs',async()=>{let runs=0;const f=await fixture(()=>({async start(_i,emit){runs++;emit({type:'command_dispatch',data:{command:'prompt'}});await sleep(250);throw new Error('Transport lost after possible effect');},async steer(){},async cancel(){},async dispose(){}}));try{const t=f.s.submit(f.b.id,randomUUID(),'effect');const follow=f.s.command(f.b.id,t.id,randomUUID(),'follow_up','dependent');await until(()=>f.s.task(f.b.id,t.id).state==='interrupted');assert.equal(f.s.task(f.b.id,follow.id).state,'cancelled');assert.equal(runs,1);}finally{await f.close();}});
 test('cancellation preempts a pending steer ACK',async()=>{let resolveStart:()=>void=()=>{},resolveSteer:()=>void=()=>{};const f=await fixture(()=>({async start(_i,emit){emit({type:'response',data:{command:'prompt',success:true,data:{disposition:'started'}}});await new Promise<void>(r=>resolveStart=r);emit({type:'agent_settled',data:{aborted:true}});},async steer(){await new Promise<void>(r=>resolveSteer=r);},async cancel(){resolveSteer();resolveStart();},async dispose(){}}));try{const t=f.s.submit(f.b.id,randomUUID(),'long');await until(()=>f.s.task(f.b.id,t.id).state==='running');f.s.command(f.b.id,t.id,randomUUID(),'steer','wait');await sleep(200);f.s.command(f.b.id,t.id,randomUUID(),'cancel');await until(()=>f.s.task(f.b.id,t.id).state==='cancelled');}finally{await f.close();}});
 test('shutdown during adapter preparation never submits a prompt',async()=>{let starts=0;let worker:Worker|undefined;const f=await fixture(()=>{void worker!.stop();return{async start(){starts++;},async steer(){},async cancel(){},async dispose(){}};});worker=f.w;try{const t=f.s.submit(f.b.id,randomUUID(),'do not start');await until(()=>f.s.task(f.b.id,t.id).state==='interrupted');assert.equal(starts,0);}finally{await f.close();}});
+
+test('worker injects scoped memory with a pinned commit and the next task sees a correction', async () => {
+  const prompts: string[] = [];
+  const f = await fixture(() => {
+    const adapter = new FakeAdapter({ delayMs: 10 });
+    return { start(input, emit) { prompts.push(input.prompt); return adapter.start(input, emit); }, steer: adapter.steer.bind(adapter), cancel: adapter.cancel.bind(adapter), dispose: adapter.dispose.bind(adapter) };
+  });
+  try {
+    const memory = new MemoryRepository(join(f.c.root, 'control', 'memory'));
+    const saved = memory.save(f.b.id, { requestId: randomUUID(), title: 'Communication', content: 'Answer with concise Chinese paragraphs.', scope: 'personal', kind: 'preference' });
+    const first = f.s.submit(f.b.id, randomUUID(), 'Explain the plan.');
+    await until(() => f.s.task(f.b.id, first.id).state === 'succeeded');
+    assert.match(prompts[0]!, /concise Chinese paragraphs/);
+    assert.equal(f.s.task(f.b.id, first.id).result, 'Demo result: Explain the plan.');
+    const loaded = f.s.events(f.b.id, first.id).find(event => event.type === 'memory.loaded');
+    assert.equal((loaded?.data as { version: string }).version, saved.version);
+    memory.update(f.b.id, saved.id, { requestId: randomUUID(), expectedRevision: saved.entry!.revision, title: 'Communication', content: 'Answer in English.' });
+    const next = f.s.submit(f.b.id, randomUUID(), 'Explain again.');
+    await until(() => f.s.task(f.b.id, next.id).state === 'succeeded');
+    assert.match(prompts[1]!, /Answer in English/);
+    assert.doesNotMatch(prompts[1]!, /concise Chinese paragraphs/);
+  } finally { await f.close(); }
+});
+test('background maintenance learns after settlement and the next task uses the committed memory', async () => {
+  const f = await fixture();
+  try { const task = f.s.submit(f.b.id,randomUUID(),'记住：输出简洁中文段落。');
+    await until(() => f.s.events(f.b.id,task.id).some(e => e.type === 'memory.maintained'));
+    const next = f.s.submit(f.b.id,randomUUID(),'Describe the testing strategy.');
+    await until(() => f.s.task(f.b.id,next.id).state === 'succeeded');
+    const loaded = f.s.events(f.b.id,next.id).find(e => e.type === 'memory.loaded'); assert.equal(loaded?.data.entries.length,1);
+    assert.match(f.s.task(f.b.id,next.id).result!,/Demo result: Describe/);
+  } finally { await f.close(); }
+});

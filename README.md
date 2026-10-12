@@ -19,6 +19,16 @@ npm run dev        # API 与 Worker 两个进程
 
 Dashboard 支持创建/选择 Bot、任务提交、历史与结果、进度事件、Steer、Follow-up、Cancel。默认端口 4310，仅允许 loopback。V1 没有登录/多人权限，不支持直接暴露到公网。
 
+### 长期记忆
+
+选择 Bot 后打开 **Memory** 页签，可以保存偏好、纠正、决策和经验，搜索、修改或忘记笔记，并查看 Git 修改历史。`All my bots` 在当前用户的 Bot 间共享；`Only this bot` 仅对当前 Bot 可见；`This project` 需要先绑定项目 slug，共用该 slug 的 Bot 可读取项目记忆。全局开关停止所有 Bot 的记忆读写，已有数据保留。
+
+记忆保存在数据目录的 `control/memory/` 独立本地 Git 仓库，不配置远端。每个 Task 自动读取固定版本的相关记忆，并在 Activity 与 **Memory used in this task** 显示实际加载/访问记录。Demo 仍使用 FakeAdapter，其结果只证明上下文传递，不代表真实模型理解或学习。
+
+真实 Pi 通过平台提供的 `memory_search`、`memory_read`、`memory_save`、`memory_update`、`memory_forget` 工具访问本轮私有 broker；Git 和控制数据库不挂入容器。更新镜像时需要重新运行 `npm run pi:build`，已有实验持久容器的镜像/文件不能隐式替换。容器内 socket、真实模型使用这些工具和 VPS 行为仍需要 Linux 验收。
+
+忘记会移除当前正文与索引，并阻止 Agent 用标准化后相同的内容重新保存；显式用户保存可以恢复。旧正文仍在 Git 历史中，自动维护另用来源时间屏障，跳过忘记前的旧任务；新任务中任意同义表达不在哈希抑制范围内。未提交的文件修改保持原状，平台暂停新的记忆写入并提示检查，不会自动覆盖。自动提炼和每日 Dreaming 已接到独立 Worker，自动条目仅属于来源 Bot，矛盾建议保留待核实。本版接口、来源和维护契约见 [记忆开发设计](docs/memory-design.md)。
+
 `npm run api` 和 `npm run worker` 可以分别启动；`npm run doctor` 检查 SQLite、Rootless Docker 和模型配置。`npm run build` 是 TypeScript 校验，Node 24 直接执行可擦除类型的 TS，不需要应用转译产物。
 
 ## 真实 Pi 模式
@@ -104,3 +114,13 @@ curl -s -H 'Content-Type: application/json' -d '{"messageId":"<uuid>","prompt":"
 ```
 
 `GET /api/bots/:botId/tasks`、`GET /api/bots/:botId/tasks/:taskId/events?after=0` 和 `POST .../:taskId/commands` 提供状态与控制；command body 为 `{messageId,type:'steer'|'follow_up'|'cancel',text?}`。所有 task IDs 均校验所属 Bot。
+
+### 自动学习与 Dreaming
+
+默认在任务结束后提炼长期记忆，并在使用后每天运行一次 Dreaming。Memory 面板显示状态、来源和待核实建议，Dream now 可显式排队。运行时的记忆和维护预算位于独立数据目录，不提交到此代码仓库。
+
+- `CHESTNUT_MEMORY_AUTOMATIC=0`：关闭自动调度；显式 Dream now 仍可执行。Memory 全局关闭会同时停止所有维护。
+- `CHESTNUT_MEMORY_DAILY_CALLS=24`：每日维护调用上限（1–200），另外限制每日 160000 字符输入、每次 30 秒和 2500 输出 token。
+- Demo 不调用模型，只从明确“Remember:”或“记住：”中保留偏好。Pi 使用外层模型凭据做来源绑定的提炼。
+
+完整存储、并发、忘记和维护契约见 [memory-design.md](docs/memory-design.md)。真实模型、跨容器 socket 和 Linux/VPS 运行仍需对应环境验收。

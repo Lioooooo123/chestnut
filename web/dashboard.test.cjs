@@ -35,7 +35,7 @@ async function setup() {
   document.hidden = false; document.getElementById = (id) => { assert.ok(elements.has(id), `Missing element ${id}`); return elements.get(id); };
   document.createElement = (tag) => new Node(tag);
   document.querySelectorAll = (selector) => selector === '[data-command]' ? [elements.get('steer-tab'), elements.get('follow-up-tab')] : [];
-  const backend = { bots: [], tasks: [], events: [], status: { mode: 'demo', worker: { online: true }, quarantines: [] }, calls: [], failNextTask: false, failNetwork: false };
+  const backend = { bots: [], tasks: [], events: [], memories: [], maintenance: { job: {state:'succeeded',provider:'explicit-demo',automatic:true}, progress: {cursor:7,lastDreamAt:Date.now(),conflicts:[]} }, memoryVersion: 'a'.repeat(40), memoryEnabled: true, memoryProject: null, status: { mode: 'demo', worker: { online: true }, quarantines: [] }, calls: [], failNextTask: false, failNetwork: false };
   const response = (payload, status = 200) => ({ ok: status < 400, status, json: async () => structuredClone(payload) });
   const task = (botId, prompt) => { const result = { id: webcrypto.randomUUID(), botId, prompt, state: 'queued', result: null, error: null, createdAt: Date.now(), updatedAt: Date.now() }; backend.tasks.unshift(result); return result; };
   const fetch = async (url, options = {}) => {
@@ -46,6 +46,23 @@ async function setup() {
     if (pathname === '/api/status') return response(backend.status);
     if (pathname === '/api/bots' && method === 'GET') return response(backend.bots);
     if (pathname === '/api/bots' && method === 'POST') { const bot = { id: webcrypto.randomUUID(), name: body.name, createdAt: Date.now() }; backend.bots.push(bot); return response(bot); }
+    const memory = pathname.match(/^\/api\/bots\/([^/]+)\/memory(?:\/([^/]+))?$/);
+    if (memory) {
+      const [, botId, id] = memory;
+      if (id === 'maintenance') {
+        if (method === 'GET') return response(backend.maintenance);
+        if (method === 'POST') { if (backend.failMaintenance) return response({error:'Worker maintenance queue unavailable.'},503); backend.maintenance.job.requested = body.requestId; return response(backend.maintenance.job); }
+        if (method === 'DELETE') { backend.maintenance.progress.conflicts = backend.maintenance.progress.conflicts.filter(c => c.id !== body.id); return response(backend.maintenance); }
+      }
+      if (method === 'GET') return response({ version: backend.memoryVersion, enabled: backend.memoryEnabled, project: backend.memoryProject, writable: true, entries: backend.memories.filter(note => note.scope === 'personal' || note.botId === botId), history: [] });
+      if (id === 'settings') { backend.memoryEnabled = body.enabled; backend.memoryProject = body.project; return response({}); }
+      if (backend.failMemory) return response({ error: 'Memory changed. Read the latest revision before editing.' }, 409);
+      backend.memoryVersion = 'b'.repeat(40);
+      if (method === 'DELETE') { backend.memories = backend.memories.filter(note => note.id !== id); return response({ id, forgotten: true }); }
+      const existing = backend.memories.find(note => note.id === id);
+      const entry = { ...(existing || {}), id: id || body.requestId, botId: body.scope === 'personal' ? null : botId, source: 'user', revision: webcrypto.randomUUID(), createdAt: Date.now(), updatedAt: Date.now(), ...body };
+      backend.memories = [...backend.memories.filter(note => note.id !== entry.id), entry]; return response({ id: entry.id, entry, version: backend.memoryVersion });
+    }
     const match = pathname.match(/^\/api\/bots\/([^/]+)\/tasks(?:\/([^/]+)\/(events|commands))?$/); assert.ok(match, `Unknown request ${url}`);
     const [, botId, taskId, action] = match;
     if (action === 'events') return response(backend.events.filter((event) => event.taskId === taskId && event.seq > Number(url.split('after=')[1] || 0)));
@@ -169,4 +186,57 @@ test('a stale task response cannot overwrite a newer bot selection', async () =>
   assert.equal(waiting, true);
   s.run(`selectBot(${JSON.stringify(second.id)})`); release(); await refresh; await s.flush();
   assert.equal(s.el('workspace-title').textContent, 'Second'); assert.equal(s.el('detail-prompt').textContent, 'Second task');
+});
+
+test('memory editor saves safely, keeps a conflicting draft, and forget waits for confirmation', async () => {
+  const s = await setup(); await s.createBot();
+  await s.el('memory-tab').emit('click'); await s.flush();
+  s.el('memory-title').value = 'Reply style'; s.el('memory-content').value = '<script>Use concise Chinese paragraphs.</script>';
+  s.el('memory-scope').value = 'personal'; s.el('memory-kind').value = 'preference';
+  await s.el('memory-form').emit('submit'); await s.flush();
+  assert.equal(s.backend.memories.length, 1);
+  assert.match(s.el('memory-list').textContent, /Reply style/);
+  const note = s.backend.memories[0]; await s.run(`selectMemory(${JSON.stringify(note.id)})`);
+  s.el('memory-content').value = 'A correction I must not lose.'; s.backend.failMemory = true;
+  await s.el('memory-form').emit('submit'); await s.flush();
+  assert.equal(s.el('memory-content').value, 'A correction I must not lose.');
+  assert.match(s.el('memory-error').textContent, /changed/);
+  s.backend.failMemory = false;
+  await s.el('memory-forget').emit('click'); assert.equal(s.backend.memories.length, 1);
+  assert.equal(s.el('memory-forget-confirm').hidden, false);
+  await s.el('memory-forget-confirm').emit('click'); await s.flush();
+  assert.equal(s.backend.memories.length, 0);
+});
+
+test('a settings draft keeps the version it was read from when another session changes memory', async () => {
+  const s = await setup(); await s.createBot(); await s.el('memory-tab').emit('click'); await s.flush();
+  s.document.activeElement = s.el('memory-project'); s.el('memory-project').value = 'chestnut';
+  await s.el('memory-project').emit('input'); s.document.activeElement = s.el('memory-title');
+  s.backend.memoryVersion = 'b'.repeat(40); await s.run('refresh()'); await s.flush();
+  assert.equal(s.el('memory-project').value, 'chestnut');
+  await s.el('memory-settings').emit('submit'); await s.flush();
+  const saved = s.backend.calls.find(call => call.pathname.endsWith('/memory/settings'));
+  assert.equal(saved.body.expectedVersion, 'a'.repeat(40));
+});
+
+test('Dreaming status and proposals are visible, requests deduplicate and dismiss never edits preferences', async () => {
+  const s = await setup(); await s.createBot();
+  s.backend.maintenance.progress.conflicts = [{id:webcrypto.randomUUID(),title:'Package manager',content:'<script>Prefer bun?</script>',sourceTaskId:webcrypto.randomUUID()}];
+  await s.el('memory-tab').emit('click'); await s.flush();
+  assert.match(s.el('memory-maintenance-status').textContent,/succeeded/);
+  assert.match(s.el('memory-conflicts').textContent,/<script>Prefer bun/);
+  await Promise.all([s.el('memory-dream').emit('click'),s.el('memory-dream').emit('click')]); await s.flush();
+  assert.equal(s.backend.calls.filter(c => c.pathname.endsWith('/maintenance') && c.method === 'POST').length,1);
+  assert.equal(s.el('memory-dream').disabled,true);
+  const buttons = s.el('memory-conflicts').querySelectorAll('*').filter(n => n.tag === 'button');
+  await buttons.find(b => b.textContent === 'Dismiss').emit('click'); await s.flush();
+  assert.equal(s.backend.maintenance.progress.conflicts.length,0); assert.equal(s.backend.memories.length,0);
+});
+
+test('a failed Dreaming request stays visible and retry keeps the request ID', async () => {
+  const s = await setup(); await s.createBot(); await s.el('memory-tab').emit('click'); await s.flush();
+  s.backend.failMaintenance = true; await s.el('memory-dream').emit('click'); await s.flush();
+  assert.equal(s.el('memory-maintenance-error').hidden,false); assert.match(s.el('memory-maintenance-error').textContent,/unavailable/);
+  s.backend.failMaintenance = false; await s.el('memory-dream').emit('click'); await s.flush();
+  const calls = s.backend.calls.filter(c => c.pathname.endsWith('/maintenance') && c.method === 'POST'); assert.equal(calls[0].body.requestId,calls[1].body.requestId);
 });

@@ -14,6 +14,8 @@ if(command==='doctor'){
   try{const {stdout}=await promisify(execFile)('docker',['info','--format','{{json .}}'],{timeout:10000});const info=JSON.parse(stdout);assertRootless(info);assertResourceControls(info);console.log('Rootless Docker and resource-control preflight verified');}catch(e){console.log(`Live Pi isolation unavailable: ${e instanceof Error?e.message:String(e)}`);if(c.mode==='pi')process.exitCode=1;}
   console.log(c.apiKey?'Outer worker model credential configured (not displayed)':'No model credential configured; demo is available');
 }else if(command==='dev'){
+  // Initialize the WAL/schema once before the two processes first open a new database.
+  const initialStore = new Store(c.dbPath); initialStore.close();
   const entry=fileURLToPath(import.meta.url);
   const children=['api','worker'].map(role=>spawn(process.execPath,[entry,role],{stdio:'inherit',env:role==='api'?{...process.env,OPENAI_API_KEY:undefined}:process.env}));
   let ending=false;

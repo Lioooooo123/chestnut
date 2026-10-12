@@ -1,0 +1,28 @@
+
+> chestnut@0.1.0 demo
+> node scripts/demo.mjs
+
+MODEL-LESS DEMO: no AI, agent shell, provider calls, or containers. Real API and browser are not exercised.
+Chestnut worker 8bdac6e2-ca99-410f-a2e8-cd5fec3c15ac (demo, concurrency 1)
+Steering persisted; queued follow-up remains separate.
+{
+  "first": "succeeded",
+  "followUp": "succeeded",
+  "result": "Demo result: Previous task context:\nOrganize this demo task\nPrevious result:\nDemo result: Organize this demo task\n\nNew user follow-up:\nContinue with a summary",
+  "events": [
+    "task.queued",
+    "task.running",
+    "command.steer.accepted",
+    "memory.loaded",
+    "pi.response",
+    "pi.agent_start",
+    "pi.response",
+    "pi.queue_update",
+    "command.sent_unconfirmed",
+    "pi.message_end",
+    "pi.agent_end",
+    "pi.agent_settled",
+    "task.succeeded",
+    "memory.maintained"
+  ]
+}

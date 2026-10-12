@@ -4,6 +4,8 @@ export interface WorkerInput {
   taskId: string;
   runId: string;
   prompt: string;
+  /** Demo display text; real runtimes always receive prompt with its composed context. */
+  displayPrompt?: string;
   workspace: string;
   sessionPath: string;
 }

@@ -12,21 +12,33 @@ import { type WorkerAdapter, type WorkerEvent } from './pi/types.ts';
 import { PersistentDockerBackend,cleanupPersistentBot,type PersistentCleanupOptions } from './sandbox/persistent-docker.ts';
 import { acquireEnvironmentLock,type EnvironmentLock } from './control/environment-lock.ts';
 import { startModelGateway } from './gateway/index.ts';
+import { MemoryRepository } from './memory/repository.ts';
+import { MemoryMaintenance } from './memory/maintenance.ts';
+import { memoryContext } from './memory/context.ts';
+import { startMemoryBroker } from './memory/broker.ts';
 
-export interface WorkerDependencies { acquireLock?:typeof acquireEnvironmentLock; gateway?:typeof startModelGateway; cleanupPersistent?:typeof cleanupPersistentBot }
+export interface WorkerDependencies { acquireLock?:typeof acquireEnvironmentLock; gateway?:typeof startModelGateway; memoryBroker?: typeof startMemoryBroker; cleanupPersistent?:typeof cleanupPersistentBot }
 export type AdapterFactory = (run: Run, gatewayDirectory: string) => WorkerAdapter;
 export class Worker {
   readonly id=randomUUID();
   private stopping=false;
   private active?:WorkerAdapter;
+  private maintenance?: MemoryMaintenance;
+  private maintenanceWork?: Promise<void>;
   private readonly store:Store;
   private readonly c:Config;
   private readonly factory?:AdapterFactory;
   private readonly deps:WorkerDependencies;
   constructor(store:Store,c:Config,factory?:AdapterFactory,deps:WorkerDependencies={}){this.store=store;this.c=c;this.factory=factory;this.deps=deps;}
-  async stop(){this.stopping=true;await this.active?.cancel().catch(()=>{});}
+  async stop(){this.stopping=true;this.maintenance?.stop();await this.active?.cancel().catch(()=>{});}
   async run(){
     if(this.c.mode==='pi'&&!this.c.apiKey)throw new Error('Real mode needs OPENAI_API_KEY in the outer worker environment');
+    this.maintenance = new MemoryMaintenance(this.store,this.c);
+    const maintain = () => {
+      if (this.stopping || this.maintenanceWork) return;
+      this.maintenanceWork = this.maintenance!.tick().catch(() => console.error('Memory maintenance unavailable; foreground tasks remain available.')).finally(() => { this.maintenanceWork = undefined; });
+    };
+    const maintenanceTimer = setInterval(maintain,2000);
     const heartbeat=setInterval(()=>this.store.heartbeat(this.id),2000);
     this.store.heartbeat(this.id);
     try{
@@ -37,9 +49,9 @@ export class Worker {
           await this.recoverQuarantine(q);
         }
         const run=this.store.claim(this.id);
-        if(run)await this.execute(run);else await sleep(quarantines.length?2000:200);
+        if(run){await this.execute(run);maintain();}else await sleep(quarantines.length?2000:200);
       }
-    }finally{clearInterval(heartbeat);this.store.heartbeat(this.id,Date.now(),0);}
+    }finally{clearInterval(maintenanceTimer);this.maintenance.stop();await this.maintenanceWork;clearInterval(heartbeat);this.store.heartbeat(this.id,Date.now(),0);}
   }
   private persistentOptions(botId:string,canMutate:()=>boolean):PersistentCleanupOptions {
     const env=this.store.environment(botId);
@@ -65,6 +77,7 @@ export class Worker {
     let environmentLock:EnvironmentLock|null=null;
     let persistentOptions:PersistentCleanupOptions|undefined;
     let gateway:Awaited<ReturnType<typeof startModelGateway>>|undefined;
+    let memoryBroker: Awaited<ReturnType<typeof startMemoryBroker>> | undefined;
     let adapter:WorkerAdapter|undefined;
     let commandTimer:ReturnType<typeof setInterval>|undefined;
     let commandWork:Promise<void>|undefined;
@@ -116,6 +129,15 @@ export class Worker {
       const task=this.store.task(run.botId,run.taskId);
       let prompt=task.prompt;
       if(task.parentTaskId){const parent=this.store.task(run.botId,task.parentTaskId);prompt=`Previous task context:\n${parent.prompt.slice(0,12000)}\nPrevious result:\n${(parent.result ?? parent.error ?? '(no result)').slice(0,16000)}\n\nNew user follow-up:\n${task.prompt}`;}
+      const displayPrompt = prompt;
+      const memory = new MemoryRepository(join(this.c.root, 'control', 'memory'));
+      const snapshot = memory.snapshot(run.botId);
+      const context = memoryContext(snapshot, task.prompt);
+      if (snapshot.enabled) this.store.appendRunEvent(run, 'memory.loaded', { version: snapshot.version, entries: context.entries.map(entry => ({ id: entry.id, title: entry.title, revision: entry.revision })) });
+      if (context.text) prompt = `${context.text}\nCurrent user request:\n${prompt}`;
+      if (snapshot.enabled && this.c.mode === 'pi') memoryBroker = await (this.deps.memoryBroker ?? startMemoryBroker)({ socketPath: join(gatewayDirectory, this.c.sandboxProfile === 'persistent' ? `${run.id}.memory.sock` : 'memory.sock'), repo: memory, botId: run.botId, taskId: run.taskId, version: snapshot.version,
+        authorize: () => this.store.mayExecute(run) && !this.stopping && (!environmentLock || environmentLock.isHeld()),
+        onEvent: (type, data) => this.store.appendRunEvent(run, type, data) });
       const onEvent=(event:WorkerEvent)=>{
         const d=event.data as Record<string,any>|undefined;
         if(event.type==='command_dispatch' && d?.command==='prompt')promptMayHaveStarted=true;
@@ -138,7 +160,7 @@ export class Worker {
       if(this.stopping||!this.store.mayExecute(run))throw new Error('Run stopped before launch');
       // A writable guest can execute modified startup code before Pi readiness.
       if(this.c.sandboxProfile==='persistent')promptMayHaveStarted=true;
-      await adapter.start({botId:run.botId,taskId:run.taskId,runId:run.id,prompt,workspace,sessionPath:join(sessionDir,'session.jsonl')},onEvent);
+      await adapter.start({botId:run.botId,taskId:run.taskId,runId:run.id,prompt,displayPrompt,workspace,sessionPath:join(sessionDir,'session.jsonl')},onEvent);
     }catch(e){error=e instanceof Error?e.message:String(e);}
     finally{
       accepting=false;
@@ -147,6 +169,7 @@ export class Worker {
       try{await adapter?.dispose();}catch(e){cleanupConfirmed=false;error=`Sandbox cleanup could not be verified: ${e instanceof Error?e.message:String(e)}`;}
       if(persistentOptions){try{persistentOptions=this.persistentOptions(run.botId,()=>!!environmentLock?.isHeld());await (this.deps.cleanupPersistent ?? cleanupPersistentBot)(run,persistentOptions,environmentLock!.runner);cleanupConfirmed=true;}catch(e){cleanupConfirmed=false;error=`Persistent bot stop unverified: ${e instanceof Error?e.message:String(e)}`;}}
       try{await gateway?.close();}catch{cleanupConfirmed=false;error='Model gateway cleanup could not be verified';}
+      try { await memoryBroker?.close(); } catch { cleanupConfirmed = false; error = 'Memory broker cleanup could not be verified'; }
       if(heartbeat)clearInterval(heartbeat);
       this.active=undefined;
       if(environmentLock){try{await environmentLock.release();}catch(e){cleanupConfirmed=false;error=`Persistent OS lock retained: ${e instanceof Error?e.message:String(e)}`;}}

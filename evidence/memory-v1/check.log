@@ -1,0 +1,135 @@
+
+> chestnut@0.1.0 check
+> npm run typecheck && npm test
+
+
+> chestnut@0.1.0 typecheck
+> tsc --noEmit
+
+
+> chestnut@0.1.0 test
+> node scripts/test.mjs
+
+✔ API handler create/chat/events/idempotency/cross-bot validation (14.442ms)
+✔ API rejects DNS rebinding, cross-origin writes, non-JSON, invalid cursor and path (2.34825ms)
+✔ API exposes worker offline and demo status without invoking a worker (0.843667ms)
+✔ API preserves Chinese and emoji across split UTF-8 body chunks (2.087125ms)
+✔ memory API persists corrections, rejects cross-bot sources and reports stale edits without overwriting (943.55475ms)
+✔ persistent writable profile requires explicit experimental opt-in and Pi mode (1.181166ms)
+✔ maintenance Internet is not silently substituted for network none (0.252875ms)
+﹣ OS environment mutex prevents concurrent owners until actual release (0.481708ms) # Requires Linux util-linux flock and /proc; real OS-lock behavior is unverified on this host.
+﹣ rapid contending flock exits are observed while descriptor closes are pending (0.048833ms) # Requires Linux util-linux flock and /proc; real OS-lock behavior is unverified on this host.
+﹣ holder runner transports bounded Docker commands and attached lines, then reaps attachment (0.040208ms) # Requires Linux util-linux flock and /proc; real OS-lock behavior is unverified on this host.
+﹣ dead parent cannot release flock before delayed lifecycle command completes and is reaped (0.036542ms) # Requires Linux util-linux flock and /proc; real OS-lock behavior is unverified on this host.
+﹣ dead parent causes attached exec client to be killed and reaped before unlock (0.040708ms) # Requires Linux util-linux flock and /proc; real OS-lock behavior is unverified on this host.
+﹣ release drains an already issued lifecycle command rather than cancelling it (0.033208ms) # Requires Linux util-linux flock and /proc; real OS-lock behavior is unverified on this host.
+﹣ timeout poisons and retains flock, reports prompt release failure, and requires explicit manual reconciliation (0.03325ms) # Requires Linux util-linux flock and /proc; real OS-lock behavior is unverified on this host.
+﹣ unexpected holder death leaves durable quarantine even while an orphan lifecycle command can finish (0.028875ms) # Requires Linux util-linux flock and /proc; real OS-lock behavior is unverified on this host.
+﹣ nonzero lifecycle result and output overflow fail closed with permanent quarantine (0.058667ms) # Requires Linux util-linux flock and /proc; real OS-lock behavior is unverified on this host.
+﹣ OS mutex isolates bot identities and rejects traversal, symlink locks, symlink directories and markers (0.086583ms) # Requires Linux util-linux flock and /proc; real OS-lock behavior is unverified on this host.
+✔ forwards only fixed endpoint with trusted credentials and configured limits (14.491375ms)
+✔ defaults max_completion_tokens, honors lower limit and configured cap (4.384917ms)
+✔ blocks wrong paths, methods, content types and invalid or overbroad requests (7.91875ms)
+✔ allows text parts and function tools/tool-call history (0.790958ms)
+✔ caps request bodies at 2 MiB, including chunked uploads (8.425291ms)
+✔ streams SSE before upstream completion and redacts key across chunks (3.222709ms)
+✔ never forwards upstream error bodies or exception details (1.231833ms)
+✔ allows at most two concurrent upstream requests and recovers slots (1.542458ms)
+✔ aborts upstream fetch when the downstream disconnects (0.476041ms)
+✔ enforces a request timeout without exposing upstream details (32.551875ms)
+✔ Unix socket integration: private modes and idempotent cleanup (4.391708ms)
+✔ rejects existing files, socket symlinks, parent symlinks, and nonprivate directories (4.112708ms)
+✔ rejects untrusted upstream URLs before opening any listener (0.751709ms)
+✔ trusted run fence denies revoked model capability before any provider call (1.426083ms)
+✔ too-long Unix socket path fails with an actionable error before binding (0.111792ms)
+✔ agent tools read a fixed snapshot, stamp the run source and lose access after cancellation (676.518667ms)
+✔ the private Unix broker accepts bounded tool requests and revokes a running session (382.235125ms)
+✔ overlong Unix paths are refused before creating a listener (233.993042ms)
+✔ automatic context is bounded and selects a Chinese project lesson without injecting unrelated history (3.385666ms)
+✔ platform Pi tools save through the real Unix broker and repeated tool execution has one effect (800.920959ms)
+✔ a saved preference has a source and Git version, and survives a new repository instance (466.24325ms)
+✔ retries do not duplicate memory and a stale correction cannot overwrite a newer one (921.331583ms)
+✔ forget removes active content and rejects an agent trying to recreate it after restart (913.829459ms)
+✔ personal preferences are shared while bot and project lessons remain scoped and memory can be turned off (2930.903042ms)
+✔ uncommitted edits are kept for inspection and never become readable memory or silently committed (266.877458ms)
+✔ persistent create uses writable root and only bot workspace/model socket directory (0.818959ms)
+✔ create/start/exec then normal dispose stops entire bot without deleting rootfs (6.88125ms)
+✔ next task reuses stopped container identity and starts no additional container (3.189958ms)
+✔ saved security and image configuration are checked rather than labels alone (0.582416ms)
+✔ stale owner cannot stop a newer run on the same persistent container (2.531541ms)
+✔ cleanup requires a current outer fencing guard and verified Docker stopped state (1.820416ms)
+✔ persistent mount rejects files that could expose host credentials (2.703916ms)
+✔ recorded container identity forbids silent replacement or missing-rootfs recovery (2.872667ms)
+✔ native filesystem validation rejects the mock regular file as a real socket (2.908041ms)
+✔ persistent gateway path rejects symlink indirection before any container is created (3.722625ms)
+✔ accepted cancellation denies create/start/exec while retaining cleanup authority (1.965541ms)
+✔ cancellation after create prevents start and leaves the writable rootfs stopped (2.776375ms)
+✔ unsupported cgroups block launch while trusted cleanup remains available (2.552166ms)
+✔ persistent launch failure before transport still requires host stop; unknown cleanup quarantines (2484.881334ms)
+✔ persistent finally stop sees recorded immutable identity and preserves environment record (669.661875ms)
+✔ persistent startup/readiness failure is an unknown outcome even before prompt dispatch (666.412334ms)
+✔ persistent old guest is stopped before a new gateway capability is published (684.13275ms)
+✔ RPC ACK and agent_end do not settle the run; only agent_settled does (3.687167ms)
+✔ handled prompt does not hang or count as a completed agent run (0.991834ms)
+✔ steer is acknowledged once, with no implicit replay on lost ACK (26.8105ms)
+✔ transport close rejects active run and never resends prompt (1.789458ms)
+✔ cancel sends all abort controls and destroys container (12.771625ms)
+✔ fake demo is deterministic and marks events as demonstration (6.856541ms)
+✔ readiness is acknowledged before lease fence permits prompt (0.264417ms)
+✔ event sink failure rejects run for fenced disposal instead of crashing host (0.132958ms)
+✔ failed sandbox cleanup rejects cancellation and remains retryable (12.16175ms)
+✔ lost prompt ACK and no settlement remain uncertain with one dispatch and no replay (16.826584ms)
+✔ complete official Pi source checksum and pinned model catalog are reproducible (428.416417ms)
+✔ actual Pi imports resolve to vendored source, without registry runtime fallback (134.75675ms)
+✔ concurrent stop callers share pending cleanup and both receive failure (0.630458ms)
+✔ background stop plus dispose cannot report success before verified cleanup (0.098834ms)
+✔ requires actual Docker rootless security option (0.626084ms)
+✔ sandbox policy disables external network, privileges, and host secret mounts (0.276709ms)
+✔ command and mount injection rejected (0.493916ms)
+✔ resource-control admission requires systemd cgroup v2 and every enforced quota (0.215167ms)
+✔ idempotent messages return same task and reject changed contents (2.990167ms)
+✔ tasks and commands are bot addressed; traversal is rejected (0.788ms)
+✔ global concurrency and per-bot mutation lock, fencing (1.053666ms)
+✔ steer is durable, not applied on ack; follow-up waits for predecessor (1.120917ms)
+✔ cancel clears pending steering and queued follow-ups; no new run (1.079834ms)
+✔ expired run is interrupted and never replayed; sending commands uncertain (1.074792ms)
+✔ live worker distinguishable from stale without treating PID as authority (0.826875ms)
+✔ events and outbox are committed together; cursor supports repeated polling (0.626125ms)
+✔ recovery quarantines environment until trusted cleanup, then permits unrelated new work (0.970709ms)
+✔ follow-up of cancelled/interrupted task is rejected instead of permanently queued (0.687667ms)
+✔ unverified disposal quarantines even a settled run (0.692292ms)
+✔ model/tool admission denies cancelling or stale runs even while cleanup owns lease (1.052667ms)
+✔ persistent bot root identity is durable and cannot silently change profile or container (0.814791ms)
+✔ demo worker runs durable bot task, steering, queued follow-up and final result (1837.87775ms)
+✔ cancel waits for cleanup, cancels pending follow-up and emits terminal cancelled (658.842125ms)
+✔ settlement containing model error is failed, never successful (651.996625ms)
+✔ demo worker restart interrupts stale task without replay and can run independent new task (479.217458ms)
+✔ mode directories cannot mix demo and real runs (2.478166ms)
+✔ a successful Pi retry clears a prior model error (673.510708ms)
+✔ lost transport after prompt dispatch is interrupted and dependent work never runs (920.567917ms)
+✔ cancellation preempts a pending steer ACK (856.652583ms)
+✔ shutdown during adapter preparation never submits a prompt (478.114333ms)
+✔ worker injects scoped memory with a pinned commit and the next task sees a correction (1058.409334ms)
+✔ empty workspace and create/select bot (5.8405ms)
+✔ repeated task submit sends once and includes a UUID (14.657458ms)
+✔ failed submission preserves draft and retry reuses message ID (3.328584ms)
+✔ changing the draft after a failed send generates a new message ID (2.490416ms)
+✔ steer is running-only and follow-up creates a new task (4.592791ms)
+✔ cancellation stays pending until backend confirms; terminal follow-up is disabled (3.237875ms)
+✔ events are incremental, ordered, and do not imply completion (2.650625ms)
+✔ errors and untrusted task names use plain text; draft survives navigation (3.44275ms)
+✔ quarantine and offline-worker states are visible without false completion (2.5025ms)
+✔ network failure keeps existing history and offers retry (2.199125ms)
+✔ hidden pages do not schedule polling; visibility resumes it (4.304833ms)
+✔ failed commands preserve text and reuse the message ID on retry (2.13425ms)
+✔ a stale task response cannot overwrite a newer bot selection (5.136208ms)
+✔ memory editor saves safely, keeps a conflicting draft, and forget waits for confirmation (2.037375ms)
+✔ a settings draft keeps the version it was read from when another session changes memory (1.420292ms)
+ℹ tests 115
+ℹ suites 0
+ℹ pass 105
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 10
+ℹ todo 0
+ℹ duration_ms 23198.023792
