@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { mkdir,lstat,realpath,readdir,open,rename,statfs } from 'node:fs/promises';
+import { mkdir,chmod,lstat,realpath,readdir,open,rename,statfs } from 'node:fs/promises';
 import { join,resolve,dirname } from 'node:path';
 import type { Store } from '../store.ts';
 import { AppError,requireId } from '../types.ts';
@@ -24,7 +24,12 @@ export async function workspaceInventory(root:string):Promise<{bytes:number;file
 }
 async function copyWorkspace(source:string,target:string,inventory:{bytes:number;files:Entry[]}){
   await privateDirectory(source);await privateDirectory(target,true);
-  for(const entry of inventory.files){if(entry.path.startsWith('/')||entry.path.split('/').some(p=>!p||p==='.'||p==='..')||entry.path.includes('\0'))throw new Error('Snapshot path escaped');const from=join(source,entry.path),to=join(target,entry.path);if(entry.kind==='directory'){await mkdir(to,{mode:entry.mode});continue;}const input=await open(from,constants.O_RDONLY|constants.O_NOFOLLOW),output=await open(to,constants.O_CREAT|constants.O_EXCL|constants.O_WRONLY|constants.O_NOFOLLOW,0o600);try{const s=await input.stat();if(!s.isFile()||s.nlink!==1||s.size!==entry.bytes)throw new Error('Snapshot file changed');const hash=createHash('sha256');let bytes=0;for await(const part of input.createReadStream({autoClose:false})){bytes+=part.length;if(bytes>entry.bytes)throw new Error('Snapshot file grew');hash.update(part);let offset=0;while(offset<part.length){const written=await output.write(part,offset,part.length-offset);if(!written.bytesWritten)throw new Error('Snapshot write did not progress');offset+=written.bytesWritten;}}if(bytes!==entry.bytes||hash.digest('hex')!==entry.sha256)throw new Error('Snapshot checksum mismatch');await output.chmod(entry.mode);await output.sync();}finally{await input.close();await output.close();}}
+  for(const entry of inventory.files){if(entry.path.startsWith('/')||entry.path.split('/').some(p=>!p||p==='.'||p==='..')||entry.path.includes('\0'))throw new Error('Snapshot path escaped');const from=join(source,entry.path),to=join(target,entry.path);if(entry.kind==='directory'){await mkdir(to,{mode:0o700});await chmod(to,0o700);continue;}const input=await open(from,constants.O_RDONLY|constants.O_NOFOLLOW),output=await open(to,constants.O_CREAT|constants.O_EXCL|constants.O_WRONLY|constants.O_NOFOLLOW,0o600);try{const s=await input.stat();if(!s.isFile()||s.nlink!==1||s.size!==entry.bytes)throw new Error('Snapshot file changed');const hash=createHash('sha256');let bytes=0;for await(const part of input.createReadStream({autoClose:false})){bytes+=part.length;if(bytes>entry.bytes)throw new Error('Snapshot file grew');hash.update(part);let offset=0;while(offset<part.length){const written=await output.write(part,offset,part.length-offset);if(!written.bytesWritten)throw new Error('Snapshot write did not progress');offset+=written.bytesWritten;}}if(bytes!==entry.bytes||hash.digest('hex')!==entry.sha256)throw new Error('Snapshot checksum mismatch');await output.chmod(entry.mode);await output.sync();}finally{await input.close();await output.close();}}
+  // Keep staging parents writable during population; restore directory modes
+  // explicitly in post-order, independent of the host umask.
+  for(const entry of [...inventory.files].reverse())if(entry.kind==='directory'){const directory=join(target,entry.path);await chmod(directory,entry.mode);await syncDirectory(directory);}
+  await syncDirectory(target);
+  if(JSON.stringify(await workspaceInventory(target))!==JSON.stringify(inventory))throw new Error('Copied workspace inventory mismatch');
 }
 export class BotSnapshots {
   readonly store:Store;readonly root:string;readonly environment:StableEnvironment;readonly operations:EnvironmentOperations;

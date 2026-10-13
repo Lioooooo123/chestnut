@@ -1,5 +1,9 @@
 # Verification report
 
+## Snapshot directory mode repair after 0ef9497
+
+Independent QA reproduced successful publication followed by workspace inventory mismatch for nested 0775 directories under umask 022. Copy now creates writable staging directories, explicitly restores their permissions in post-order after copying files, fsyncs them, and verifies the entire copied inventory before snapshot publication or restore/rollback replacement. Real filesystem regressions exercise nested 0775 and read-only 0555 directories through create, load, protection snapshot and restore; all 16 snapshot tests pass with a synthetic Docker runner. Final guarded macOS check: **345 tests, 335 pass, 0 fail, 10 Linux OS-lock skips**, with clean TypeScript. Existing corrupt snapshots remain rejected; no manifest rewrite or Docker live acceptance is claimed.
+
 ## Bot Chromium desktop and stopped file snapshots (2026-10-13 UTC)
 
 On Node v26.5.0 / npm 11.17.0, final guarded `npm run check` passed: **343 tests, 333 passed, 0 failed, 10 explicitly skipped Linux OS-lock tests** (72.5 seconds). Strict TypeScript passed. This includes 48 dashboard controller tests, 14 snapshot tests (actual filesystem/SQLite with a fake Docker runner), four desktop contracts (VM/argv/policy/serialization), computer-broker receipts and API ownership/confirmation checks. Snapshot fault tests inject exceptions at durable phases; they do not kill a real Docker daemon or restore a real container. Two tests execute the actual Worker queue: a model-less snapshot completes, and a dead running owner becomes uncertain without replay. Real Mac Unix/loopback integration and the existing independent Worker/process restart tests also passed.

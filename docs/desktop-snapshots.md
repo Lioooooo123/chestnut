@@ -62,6 +62,8 @@ API 的 `GET /api/bots/:id/desktop` 返回状态；`GET .../desktop/frame?sessio
 
 每 Bot 最多 16 个已发布快照（保护版本也计数），workspace 最多 20,000 项、512 MiB，Docker save archive 最多 8 GiB，SizeRootFs 最多 4 GiB；空间准入保留 rootfs×3 + workspace×3 + 512 MiB。保护快照占一个槽位，因此满额时恢复也会拒绝。没有自动永久清理接口；达到上限需另行审核容量和留存方案。
 
+workspace 复制先使用可写 staging 目录，填充完毕后从子目录向父目录显式恢复权限，重新核对完整 inventory 后才允许发布或交换；不依赖宿主 umask。旧版本已保存但校验不一致的快照仍拒绝加载，不会自动修改其 manifest。
+
 workspace 拒绝 symlink、hardlink、设备、socket 和其他特殊文件。Docker 生成的外层 tar 仅允许目录/常规文件和受支持索引，拒绝绝对路径、穿越、重复记录、links、devices 和扩展头；不接受用户上传或宿主 tar 解压。版本/归属/文件/manifest/archive 校验失败均拒绝。目录、归属、路径与锁 fence 同样核验。这些限额不是 Docker writable-layer 磁盘配额；其他运行日志和镜像仍能耗尽宿主磁盘。
 
 ## Linux 实机验收门槛（未执行）

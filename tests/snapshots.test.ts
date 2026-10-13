@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp,mkdir,realpath,rm,writeFile,readFile,symlink,link,lstat } from 'node:fs/promises';
+import { mkdtemp,mkdir,realpath,rm,writeFile,readFile,symlink,link,lstat,chmod,readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash,randomUUID } from 'node:crypto';
@@ -54,4 +54,19 @@ for(const crashed of [false,true])test(crashed?'new Worker marks a dead running 
   const c=config({CHESTNUT_MODE:'pi',CHESTNUT_SANDBOX_PROFILE:'service',CHESTNUT_EXPERIMENTAL_SERVICE:'1',CHESTNUT_DATA_DIR:f.root,CHESTNUT_IMAGE:f.env.options.image,CHESTNUT_MEMORY_AUTOMATIC:'0'});c.gatewayRoot=join(f.root,'gateway');
   let releases=0;const worker=new Worker(f.s,c,undefined,{acquireLock:async()=>{let held=true;return {runner:f.docker,isHeld:()=>held,release:async()=>{held=false;releases++;}};}}),before=f.docker.calls.length,work=worker.run();
   try{let outcome='';for(let i=0;i<300;i++){outcome=f.ops.get(f.bot.id,operation.requestId).state;if(['succeeded','uncertain'].includes(outcome))break;await sleep(25);}assert.equal(outcome,crashed?'uncertain':'succeeded');assert.ok(releases>0);if(crashed){assert.equal(f.docker.calls.length,before);assert.equal(f.snapshots.list().length,0);}else assert.equal(f.snapshots.list().length,1);}finally{await worker.stop();await work;await f.close();}
+});
+
+for(const mode of [0o775,0o555])test(`snapshot/load/restore preserve nested directory mode ${mode.toString(8)} under umask 022`,async()=>{
+  const previousMask=process.umask(0o022),f=await fixture();
+  async function writableTree(path:string){await chmod(path,0o700);for(const entry of await readdir(path,{withFileTypes:true}))if(entry.isDirectory())await writableTree(join(path,entry.name));}
+  try{
+    const parent=join(f.workspace,'nested'),child=join(parent,'child');await mkdir(child,{recursive:true,mode:0o700});await writeFile(join(child,'sample.txt'),'snapshot content');await chmod(child,mode);await chmod(parent,mode);
+    const expected=await workspaceInventory(f.workspace),o=f.running('snapshot'),snapshot=await f.snapshots.create(o);f.ops.finish(o,snapshot);
+    assert.deepEqual((await f.snapshots.load(snapshot.id)).manifest.workspace,expected);
+    const saved=join(f.root,'control','snapshots',f.bot.id,snapshot.id,'workspace');for(const relative of ['nested','nested/child'])assert.equal((await lstat(join(saved,relative))).mode&0o777,mode);
+    await writeFile(join(child,'sample.txt'),'changed');const restore=f.running('restore',{snapshotId:snapshot.id}),result=await f.snapshots.restore(restore,snapshot.id);f.ops.finish(restore,result);
+    assert.deepEqual(await workspaceInventory(f.workspace),expected);assert.equal(await readFile(join(f.workspace,'nested','child','sample.txt'),'utf8'),'snapshot content');
+    for(const relative of ['nested','nested/child'])assert.equal((await lstat(join(f.workspace,relative))).mode&0o777,mode);
+    assert.equal((await f.snapshots.load(result.protectionId)).manifest.workspace.files.find(entry=>entry.path==='nested/child')!.mode,mode);
+  }finally{process.umask(previousMask);await writableTree(f.root);await f.close();}
 });
