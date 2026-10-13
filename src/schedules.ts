@@ -256,6 +256,7 @@ export class Scheduler {
       const result = this.store.tx(() => {
         // Re-read after BEGIN IMMEDIATE: another process may already have fired, paused or deleted it.
         const schedule = this.get(item.botId, item.id);
+        if(this.store.get("SELECT requestId FROM environment_operations WHERE botId=? AND state IN ('queued','running','uncertain') LIMIT 1",schedule.botId))return null;
         if (schedule.state !== 'active' || schedule.nextRunAt === null || schedule.nextRunAt > now) return null;
         const scheduledAt = schedule.nextRunAt;
         const nextRunAt = schedule.kind === 'cron' ? nextCronRun(schedule.cron!, schedule.timeZone, now) : null;

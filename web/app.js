@@ -19,7 +19,7 @@ const management = {
   policyDirty: false, policyRevision: null, policyDrafts: new Map(),
   schedules: null, scheduleStatus: null, schedulesLoading: false, scheduleBusy: false, schedulesError: '',
   scheduleDrafts: new Map(), deleteId: null, historyId: null, history: null, historyError: '',
-  loads: new Map(),
+  loads: new Map(), machines:null, machineError:'', machineMutationError:'', machineBusy:false, machineConfirmation:null, machineSignature:'',
 };
 let toastTimer;
 let pollTimer;
@@ -515,7 +515,7 @@ window.addEventListener('pagehide',()=>{if(state.botId)state.drafts.set(state.bo
 
 const memoryPath = (botId = state.botId) => `/api/bots/${encodeURIComponent(botId)}/memory`;
 function setView(view) {
-  if (view !== state.view) { cancelManagementLoads(); management.deleteId = null; $('environment-stop-confirmation').hidden = true; }
+  if (view !== state.view) { cancelManagementLoads(); management.deleteId = null; management.machineConfirmation=null; $('restore-confirmation').hidden=true; $('environment-stop-confirmation').hidden = true; }
   state.view = view;
   for (const name of ['tasks', 'memory', 'environment', 'schedules']) {
     $(`${name}-view`).hidden = view !== name;
@@ -719,6 +719,7 @@ function rememberManagementDrafts() {
 }
 function resetManagement() {
   cancelManagementLoads();
+  management.machineSignature='';management.machines=null;management.machineError='';management.machineMutationError='';management.machineConfirmation=null;renderMachines();
   management.environment = null; management.environmentError = ''; management.environmentMutationError = ''; management.policyRevision = null; management.policyDirty = false;
   scheduleSignature = '';
   management.schedules = null; management.scheduleStatus = null; management.schedulesError = ''; management.deleteId = null; management.historyId = null; management.history = null; management.historyError = '';
@@ -771,7 +772,7 @@ function renderEnvironment() {
   const disabled = management.environmentBusy || !policy;
   for (const id of ['environment-packages', 'environment-hosts', 'environment-policy-save', 'environment-policy-reload']) $(id).disabled = disabled;
   $('environment-policy-save').textContent = management.environmentBusy ? 'Working…' : 'Save allowlists';
-  renderTelegram();
+  renderTelegram();renderMachines();
 }
 async function loadEnvironment(botId = state.botId, revision = state.botRevision) {
   if (!botId) return;
@@ -780,7 +781,7 @@ async function loadEnvironment(botId = state.botId, revision = state.botRevision
     const result = await api(environmentPath(botId), { signal: controller.signal });
     if (!currentManagementLoad('environment', controller, botId, revision)) return;
     if (!result || typeof result !== 'object' || !result.policy || !Array.isArray(result.policy.allowedPackages) || !Array.isArray(result.policy.allowedHosts)) throw new Error('The server returned an invalid environment policy.');
-    management.environment = result; management.environmentError = '';
+    management.environment = result; management.environmentError = '';void loadMachines(botId,revision);
     if (!management.policyDirty && !management.environmentBusy) {
       $('environment-packages').value = result.policy.allowedPackages.join('\n'); $('environment-hosts').value = result.policy.allowedHosts.join('\n'); management.policyRevision = result.policy.revision;
     }
@@ -788,6 +789,38 @@ async function loadEnvironment(botId = state.botId, revision = state.botRevision
   finally { if (currentManagementLoad('environment', controller, botId, revision)) { management.environmentLoading = false; management.loads.delete('environment'); renderEnvironment(); } }
 }
 function allowlist(value) { return [...new Set(value.split(/[\n,]/).map(item => item.trim()).filter(Boolean))]; }
+function renderMachines(){
+  const data=management.machines,session=data?.desktop?.session,blocked=data?.snapshots?.operations?.some(o=>['queued','running','uncertain'].includes(o.state)),active=state.tasks.some(task=>['running','cancelling'].includes(task.state));
+  $('desktop-status').textContent=session?`Bot ${state.bots.find(b=>b.id===state.botId)?.name||state.botId} · session ${session.sessionId} · ${session.state} · last capture ${session.capturedAt?fullDate(session.capturedAt):'none'}. Not live-verified.`:'No screen recorded for this Bot. Desktop requires the opt-in service image; no live Docker verification is claimed.';
+  const screen=$('desktop-screen');screen.hidden=!session?.capturedAt||session.state!=='running';if(!screen.hidden){const source=`/api/bots/${encodeURIComponent(state.botId)}/desktop/frame?session=${encodeURIComponent(session.sessionId)}&at=${session.capturedAt}`;if(screen.dataset.frame!==source){screen.src=source;screen.dataset.frame=source;}}else{screen.src='';screen.dataset.frame='';}
+  $('desktop-start').disabled=management.machineBusy||!data?.desktop?.enabled||blocked||active;
+  $('snapshot-create').disabled=management.machineBusy||!data?.snapshots?.enabled||blocked||active||!management.environment?.containerId;
+  $('machine-refresh').disabled=management.machineBusy;setError('machine-error',management.machineMutationError||management.machineError);
+  const signature=JSON.stringify([state.botId,data?.snapshots,management.machineBusy,blocked,active]);if(signature!==management.machineSignature){management.machineSignature=signature;
+  const snapshots=$('snapshot-list');snapshots.replaceChildren();for(const snapshot of data?.snapshots?.snapshots||[]){const card=element('section','management-card');card.append(element('h4','',`Snapshot ${snapshot.id}`),element('p','memory-description',`${fullDate(snapshot.createdAt)} · ${Math.ceil(((snapshot.rootfs?.bytes||0)+(snapshot.workspace?.bytes||0))/1024/1024)} MiB · rootfs + workspace · SHA-256 recorded`));const button=element('button','button','Restore these files');button.type='button';button.disabled=management.machineBusy||!data?.snapshots?.enabled||blocked||active;button.addEventListener('click',()=>{management.machineConfirmation={action:'restore',snapshotId:snapshot.id};renderMachines();});card.append(button);snapshots.append(card);}
+  const operations=$('operation-list');operations.replaceChildren();for(const operation of data?.snapshots?.operations||[]){const card=element('section','management-card');card.append(element('p','memory-description',`${operation.action} · ${operation.state} · phase: ${operation.phase} · request ${operation.requestId}`));if(operation.result?.protectionId)card.append(element('p','memory-description',`Protection snapshot: ${operation.result.protectionId}`));if(operation.error)card.append(element('p','form-error',operation.error));if(operation.state==='uncertain'){const rollback=!!operation.result?.protectionId,button=element('button','button',rollback?'Roll back to protection snapshot':'Verify stopped and unblock');button.type='button';button.disabled=management.machineBusy;button.addEventListener('click',()=>{management.machineConfirmation={action:rollback?'rollback':'contain',operationId:operation.requestId};renderMachines();});card.append(button);}operations.append(card);}}
+  $('restore-confirmation').hidden=!management.machineConfirmation;
+  $('restore-description').textContent=management.machineConfirmation?.action==='contain'?'Review this exact uncertain request. The Worker will verify the Bot environment is stopped before unblocking; no operation is replayed.':'Restore only this Bot’s stopped rootfs/workspace files. A normal restore first creates a protection snapshot; rollback uses the recorded protection and retains failed artifacts. Process memory/services and browser login will not return. New Bot tasks and schedules stay blocked until verified.';
+  $('restore-confirm').disabled=management.machineBusy;
+}
+async function loadMachines(botId=state.botId,revision=state.botRevision){
+  if(!botId)return;const controller=beginManagementLoad('machines');
+  try{const [desktop,snapshots]=await Promise.all([api(`/api/bots/${encodeURIComponent(botId)}/desktop`,{signal:controller.signal}),api(`/api/bots/${encodeURIComponent(botId)}/snapshots`,{signal:controller.signal})]);if(!currentManagementLoad('machines',controller,botId,revision))return;if(!Array.isArray(snapshots.snapshots)||!Array.isArray(snapshots.operations))throw new Error('Invalid snapshot list');management.machines={desktop,snapshots};management.machineError='';}
+  catch(error){if(currentManagementLoad('machines',controller,botId,revision))management.machineError=error.message;}
+  finally{if(currentManagementLoad('machines',controller,botId,revision)){management.loads.delete('machines');renderMachines();}}
+}
+async function machineAction(input){
+  if(management.machineBusy||!state.botId)return;const botId=state.botId,revision=state.botRevision,key=`machine:${botId}:${input.action}`,requestId=submission(key,{botId,...input});management.machineBusy=true;management.machineError='';management.machineMutationError='';renderMachines();
+  const path=input.action==='desktop'?`/api/bots/${botId}/desktop`:['contain','rollback'].includes(input.action)?`/api/bots/${botId}/environment-operations/${input.operationId}/${input.action}`:`/api/bots/${botId}/snapshots`;
+  try{await post(path,{requestId,...(input.action==='desktop'?{}:['contain','rollback'].includes(input.action)?{confirmed:true}:{action:input.action,...(input.snapshotId?{snapshotId:input.snapshotId,confirmed:true}:{})})});state.submissions.delete(key);if(botId===state.botId&&revision===state.botRevision){management.machineConfirmation=null;toast('Operation accepted. Await the Worker’s verified outcome; files are not restored on HTTP acknowledgment.');}}
+  catch(error){if(botId===state.botId&&revision===state.botRevision)management.machineMutationError=`${error.message} Check operation history before retrying. An unchanged retry here retains its request ID.`;}
+  finally{management.machineBusy=false;if(botId===state.botId&&revision===state.botRevision){renderMachines();await loadMachines(botId,revision);}}
+}
+$('desktop-start').addEventListener('click',()=>!$('desktop-start').disabled&&machineAction({action:'desktop'}));
+$('snapshot-create').addEventListener('click',()=>!$('snapshot-create').disabled&&machineAction({action:'snapshot'}));
+$('machine-refresh').addEventListener('click',()=>loadMachines());
+$('restore-back').addEventListener('click',()=>{management.machineConfirmation=null;renderMachines();});
+$('restore-confirm').addEventListener('click',()=>management.machineConfirmation&&machineAction(management.machineConfirmation));
 async function saveEnvironmentPolicy(event) {
   event.preventDefault(); if (management.environmentBusy || !state.botId || !management.environment?.policy) return;
   const botId = state.botId, revision = state.botRevision;

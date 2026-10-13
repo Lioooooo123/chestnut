@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { Scheduler, type ScheduleInput } from './schedules.ts';
 import { EnvironmentPolicies } from './environments/policy.ts';
+import { EnvironmentOperations, publicOperation } from './environments/operations.ts';
 import { telegramReadiness } from './channels/telegram.ts';
 import { Store } from './store.ts';
 import { AppError } from './types.ts';
@@ -40,7 +41,7 @@ export function createApi(store:Store,c:Config,dependencies:{oauthFlow?:OAuthFlo
         if(req.method==='DELETE'&&url.pathname==='/api/auth'){send(res,200,await auth.logout());return;}
         throw new AppError(405,'Method not allowed');
       }
-      if(url.pathname==='/api/status' && req.method==='GET') {send(res,200,{mode:c.mode,sandboxProfile:c.sandboxProfile,experimental:c.sandboxProfile!=='ephemeral',worker:store.workerStatus(),concurrency:1,quarantines:store.quarantines(),isolation:c.mode==='demo'?'none (model-less; no shell or network)':'rootless Docker, network none',version:'0.2.0-dev',capabilities:{serviceProfile:c.sandboxProfile==='service',liveVerified:false,network:'none + governed HTTPS fetch',packageInstall:'operator allowlist'},channels:{telegram:telegramReadiness(store)}});return;}
+      if(url.pathname==='/api/status' && req.method==='GET') {send(res,200,{mode:c.mode,sandboxProfile:c.sandboxProfile,experimental:c.sandboxProfile!=='ephemeral',worker:store.workerStatus(),concurrency:1,quarantines:store.quarantines(),isolation:c.mode==='demo'?'none (model-less; no shell or network)':'rootless Docker, network none',version:'0.2.0-dev',capabilities:{desktop:!!c.desktopEnabled,snapshots:c.mode==='pi'&&c.sandboxProfile==='service',serviceProfile:c.sandboxProfile==='service',liveVerified:false,network:'none + governed HTTPS fetch',packageInstall:'operator allowlist'},channels:{telegram:telegramReadiness(store)}});return;}
       if(url.pathname==='/api/events' && req.method==='GET'){send(res,200,store.changes(cursor(url)));return;}
       if(url.pathname==='/api/bots') {
         if(req.method==='GET'){send(res,200,store.bots());return;}
@@ -52,6 +53,19 @@ export function createApi(store:Store,c:Config,dependencies:{oauthFlow?:OAuthFlo
       if(receipt&&req.method==='GET'){send(res,200,store.requestStatus(receipt[1]!,receipt[2]!));return;}
       const envMatch=/^\/api\/bots\/([^/]+)\/environment$/.exec(url.pathname);
       if(envMatch&&req.method==='GET'){const botId=envMatch[1]!;send(res,200,{...(store.environment(botId)??{botId,profile:c.sandboxProfile,state:'unprovisioned'}),policy:policies.get(botId),stop:policies.stopStatus(botId),verification:'not-live-verified'});return;}
+      const managed=/^\/api\/bots\/([^/]+)\/(desktop(?:\/frame)?|snapshots|environment-operations(?:\/([^/]+)\/(contain|rollback))?)$/.exec(url.pathname);
+      if(managed){const [,botId,resource,operationId,recovery]=managed;store.bot(botId!);const operations=new EnvironmentOperations(store);
+        if(resource==='desktop/frame'&&req.method==='GET'){const frame=store.get<{png:string|null;capturedAt:number;sessionId:string}>("SELECT png,capturedAt,sessionId FROM desktop_sessions WHERE botId=? AND state='running'",botId!);if(!frame?.png)throw new AppError(404,'No current Bot screen');if(url.searchParams.get('session')!==frame.sessionId)throw new AppError(409,'Desktop session changed; refresh status');res.writeHead(200,{'content-type':'image/png','cache-control':'no-store','x-content-type-options':'nosniff','content-security-policy':"default-src 'none'; frame-ancestors 'none'"});res.end(Buffer.from(frame.png,'base64'));return;}
+        if(resource==='desktop'&&req.method==='GET'){const row=store.get<any>('SELECT botId,sessionId,state,url,capturedAt,error FROM desktop_sessions WHERE botId=?',botId!);send(res,200,{enabled:!!c.desktopEnabled,network:'offline fixture only; network none',session:row??null,verification:'not-live-verified'});return;}
+        if(resource==='snapshots'&&req.method==='GET'){send(res,200,{enabled:c.mode==='pi'&&c.sandboxProfile==='service',snapshots:store.all<{manifest:string;manifestHash:string}>('SELECT manifest,manifestHash FROM environment_snapshots WHERE botId=? ORDER BY createdAt DESC',botId!).map(row=>{const m=JSON.parse(row.manifest);return {format:m.format,id:m.id,botId:m.botId,createdAt:m.createdAt,imageId:m.imageId,sourceImageId:m.sourceImageId,rootfs:m.rootfs,workspace:{bytes:m.workspace?.bytes,files:m.workspace?.files?.length},scope:m.scope,excluded:m.excluded,manifestHash:row.manifestHash};}),operations:operations.list(botId!),scope:'Stopped rootfs + workspace; no memory checkpoint or managed browser login'});return;}
+        if(resource==='environment-operations'&&req.method==='GET'){send(res,200,operations.list(botId!));return;}
+        if(req.method==='POST'){if(c.mode!=='pi'||c.sandboxProfile!=='service')throw new AppError(409,'Desktop/snapshots require explicit Pi service profile');const b=await body(req);
+          if(resource==='desktop'){if(!c.desktopEnabled)throw new AppError(409,'Desktop disabled; build and opt into the desktop image');if(Object.keys(b).some(k=>k!=='requestId'))throw new AppError(400,'Desktop API starts/captures only; Agent input uses its private task grant');send(res,202,publicOperation(operations.request(botId!,b.requestId as string,'desktop')));return;}
+          if(resource==='snapshots'){if(Object.keys(b).some(k=>!['requestId','action','snapshotId','confirmed'].includes(k))||!['snapshot','restore'].includes(b.action as string))throw new AppError(400,'Invalid snapshot action');if(b.action==='restore'&&b.confirmed!==true)throw new AppError(409,'Explicitly confirm stopped file restore and loss of browser login/process memory');send(res,202,publicOperation(operations.request(botId!,b.requestId as string,b.action as string,b.action==='restore'?{snapshotId:b.snapshotId}:{})));return;}
+          if(recovery&&operationId){if(b.confirmed!==true||Object.keys(b).some(k=>!['requestId','confirmed'].includes(k)))throw new AppError(409,'Explicitly review and confirm the blocked operation');send(res,202,publicOperation(operations.request(botId!,b.requestId as string,recovery,{operationId})));return;}
+        }
+        throw new AppError(405,'Method not allowed');
+      }
       const policyMatch=/^\/api\/bots\/([^/]+)\/environment\/(policy|stop|reconcile)$/.exec(url.pathname);
       if(policyMatch){const [,botId,action]=policyMatch;store.bot(botId!);const b=await body(req);
         if(action==='policy'&&req.method==='PUT'){send(res,200,policies.set(botId!,b as any));return;}

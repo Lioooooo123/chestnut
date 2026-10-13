@@ -217,10 +217,10 @@ test('platform extension verifies unique tool names and exact owner paths agains
   const { registerEnvironmentTools, verifyEnvironmentTools } = await import(new URL('../src/environments/pi-extension.mjs', import.meta.url).href);
   const definitions: Array<{ name: string }> = [];
   registerEnvironmentTools({ registerTool: (definition: { name: string }) => definitions.push(definition) }, '/unused-fixture');
-  assert.deepEqual(definitions.map(tool => tool.name).sort(), ['environment_bash', 'environment_edit', 'environment_fetch', 'environment_packages', 'environment_read', 'environment_write']);
+  assert.deepEqual(definitions.map(tool => tool.name).sort(), ['environment_bash', 'environment_computer', 'environment_edit', 'environment_fetch', 'environment_packages', 'environment_read', 'environment_write']);
   const owned = definitions.map(tool => ({ ...tool, sourceInfo: { path: '/opt/chestnut/environment-extension.mjs' } }));
   const pi = { getActiveTools: () => definitions.map(tool => tool.name), getAllTools: () => owned };
-  assert.equal(verifyEnvironmentTools(pi, false).length, 6);
+  assert.equal(verifyEnvironmentTools(pi, false).length, 7);
   assert.throws(() => verifyEnvironmentTools({ ...pi, getActiveTools: () => [...pi.getActiveTools(), 'bash'] }, false), /readiness/);
   assert.throws(() => verifyEnvironmentTools({ ...pi, getAllTools: () => owned.map(tool => ({ ...tool, sourceInfo: { path: 'builtin:bash' } })) }, false), /ownership/);
   assert.throws(() => verifyEnvironmentTools(pi, true), /readiness/);

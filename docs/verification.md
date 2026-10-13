@@ -1,5 +1,16 @@
 # Verification report
 
+## Bot Chromium desktop and stopped file snapshots (2026-10-13 UTC)
+
+On Node v26.5.0 / npm 11.17.0, final guarded `npm run check` passed: **343 tests, 333 passed, 0 failed, 10 explicitly skipped Linux OS-lock tests** (72.5 seconds). Strict TypeScript passed. This includes 48 dashboard controller tests, 14 snapshot tests (actual filesystem/SQLite with a fake Docker runner), four desktop contracts (VM/argv/policy/serialization), computer-broker receipts and API ownership/confirmation checks. Snapshot fault tests inject exceptions at durable phases; they do not kill a real Docker daemon or restore a real container. Two tests execute the actual Worker queue: a model-less snapshot completes, and a dead running owner becomes uncertain without replay. Real Mac Unix/loopback integration and the existing independent Worker/process restart tests also passed.
+
+Reverified all 2,029 pinned Pi source hashes/license and 14 local package links, zero registry substitutes; vendor/workflows remain unchanged. Earlier upstream offline build, 22 selected source contracts and compiled RPC readiness results still apply to the unchanged vendor. No real model, account, package download/install or Telegram call was used.
+
+Safari with a real loopback API but **sample pixels/snapshot metadata and no Worker/Docker** verified Bot/session labeling, explicit restore confirmation, accepted-but-queued wording, disabled competing actions, cross-Bot clearing and persistence of the identical request after API restart/reload. The separate Safari HTML fixture accepted sample typing/clicking and rendered the greeting; this is native-browser fixture interaction, not `environment_computer` or the Bot Chromium backend. The UI fixture and its runtime databases stay outside the repository. This is not a full mobile/accessibility audit.
+
+The existing local Unix Docker daemon was unavailable; no image was built and no rootless container/Chromium sandbox/input/PNG/session continuity/real file restore or SIGKILL recovery was accepted as live-tested. No Docker privilege/sandbox fallback, host installation, security setting change, public listener, new persistent credential, old VPS or Tailscale access, deployment or PR was used. The new [feature guide](desktop-snapshots.md) records exact opt-in, retention/resource limits and required Linux negative/crash checks. Publish by normal fast-forward with `[skip ci]`, and independently verify the remote tree and Actions history.
+
+
 ## Escaped pending-signature repair after 98092da
 
 The large-journal test now escapes pending signatures themselves: 30 signatures over 192k characters survive a 13M-character journal reload alongside all drafts, selections, kinds and Bot draft. Shared signature/entry validation prevents successful saves of entries the reader would discard. UI-event regressions verify task/Steer/follow-up 20k escaped text retains the original request IDs for explicit unchanged retries, with no automatic POST. Full guarded macOS check: **320 tests, 310 pass, 0 fail, 10 Linux OS-lock skips**; 45 controller tests passed, and real loopback process/restart coverage passed. This repair has controller coverage; runtime/vendor/workflows and the earlier live-verification boundaries are unchanged.

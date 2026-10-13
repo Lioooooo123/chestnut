@@ -17,6 +17,13 @@ async function request(broker: Handler, input: unknown, overrides: { method?: st
 }
 function input(command = 'printf fixture') { return { requestId: randomUUID(), command }; }
 
+test('computer input shares receipts and revocation; unknown dispatch cannot be replayed',async()=>{
+  let allowed=true,calls=0;const computer={op:'type',text:'fixture only'},body={requestId:randomUUID(),action:'computer',computer};
+  const broker=createEnvironmentHandler({socketPath:'/unused',authorize:()=>allowed,environment:{async execute(){return result;}},computer:async()=>{calls++;return {sessionId:randomUUID(),png:'fixture-header-only'};}});
+  assert.equal((await request(broker,body)).status,200);assert.equal((await request(broker,body)).status,200);assert.equal(calls,1);assert.equal((await request(broker,{...body,computer:{op:'click',x:1,y:1}})).status,409);allowed=false;assert.equal((await request(broker,body)).status,403);await broker.close();
+  let attempts=0;const uncertain=createEnvironmentHandler({socketPath:'/unused',authorize:()=>true,environment:{async execute(){return result;}},computer:async()=>{attempts++;throw new Error('lost screenshot after click');}});assert.equal((await request(uncertain,body)).status,502);assert.equal((await request(uncertain,body)).status,409);assert.equal(attempts,1);assert.equal(uncertain.isHealthy(),false);await uncertain.close();
+});
+
 test('bounded environment command runs once and an identical request reuses its receipt', async () => {
   let calls = 0; const events: string[] = [];
   const broker = createEnvironmentHandler({ socketPath: '/unused', authorize: () => true, environment: { async execute() { calls++; return result; } }, onEvent: type => events.push(type) });

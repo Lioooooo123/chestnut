@@ -10,6 +10,9 @@ export class Store {
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA synchronous=FULL;
       CREATE TABLE IF NOT EXISTS bots(id TEXT PRIMARY KEY,name TEXT NOT NULL,createdAt INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS bot_requests(requestId TEXT PRIMARY KEY,name TEXT NOT NULL,botId TEXT NOT NULL REFERENCES bots(id));
+      CREATE TABLE IF NOT EXISTS environment_operations(requestId TEXT PRIMARY KEY,botId TEXT NOT NULL REFERENCES bots(id),action TEXT NOT NULL,payload TEXT NOT NULL,state TEXT NOT NULL,phase TEXT NOT NULL,result TEXT,error TEXT,updatedAt INTEGER NOT NULL,ownerId TEXT);
+      CREATE TABLE IF NOT EXISTS environment_snapshots(id TEXT PRIMARY KEY,botId TEXT NOT NULL REFERENCES bots(id),manifest TEXT NOT NULL,manifestHash TEXT NOT NULL,createdAt INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS desktop_sessions(botId TEXT PRIMARY KEY REFERENCES bots(id),sessionId TEXT NOT NULL,state TEXT NOT NULL,url TEXT NOT NULL,capturedAt INTEGER,png TEXT,error TEXT);
       CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY,botId TEXT NOT NULL REFERENCES bots(id),prompt TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN ('queued','running','cancelling','succeeded','failed','cancelled','interrupted')),parentTaskId TEXT REFERENCES tasks(id),result TEXT,error TEXT,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS runs(fence INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT UNIQUE NOT NULL,taskId TEXT NOT NULL REFERENCES tasks(id),botId TEXT NOT NULL,workerId TEXT NOT NULL,token TEXT NOT NULL,state TEXT NOT NULL,leaseUntil INTEGER NOT NULL,startedAt INTEGER NOT NULL,finishedAt INTEGER);
       CREATE TABLE IF NOT EXISTS commands(id TEXT PRIMARY KEY,messageId TEXT NOT NULL,taskId TEXT NOT NULL REFERENCES tasks(id),botId TEXT NOT NULL,type TEXT NOT NULL,text TEXT,state TEXT NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL,UNIQUE(botId,messageId));
@@ -24,6 +27,8 @@ export class Store {
       CREATE INDEX IF NOT EXISTS task_queue ON tasks(state,createdAt);
       CREATE INDEX IF NOT EXISTS task_events ON events(taskId,seq);
       CREATE INDEX IF NOT EXISTS commands_pending ON commands(taskId,state,createdAt);`);
+    if(!this.all<{name:string}>('PRAGMA table_info(environment_operations)').some(column=>column.name==='ownerId'))this.db.exec('ALTER TABLE environment_operations ADD COLUMN ownerId TEXT');
+    if(!this.all<{name:string}>('PRAGMA table_info(bot_environments)').some(column=>column.name==='imageRef'))this.db.exec('ALTER TABLE bot_environments ADD COLUMN imageRef TEXT');
   }
   close() { this.db.close(); }
   get<T>(sql: string, ...args: Bind[]): T | undefined { return this.db.prepare(sql).get(...args) as T | undefined; }
@@ -53,6 +58,7 @@ export class Store {
     const value = action(); this.db.prepare('INSERT INTO requests VALUES (?,?,?,?)').run(botId, messageId, serialized, JSON.stringify(value)); return value;
   }
   private insertTask(botId: string, prompt: string, parentTaskId: string | null = null): Task {
+    if(this.get("SELECT requestId FROM environment_operations WHERE botId=? AND state IN ('queued','running','uncertain') LIMIT 1",botId))throw new AppError(409,'Bot environment operation pending; inspect its outcome before new work');
     const now = Date.now(), task: Task = {id: randomUUID(),botId,prompt,state:'queued',parentTaskId,result:null,error:null,createdAt:now,updatedAt:now};
     this.db.prepare('INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?)').run(task.id,botId,prompt,'queued',parentTaskId,null,null,now,now);
     this.event(botId,task.id,'task.queued',{parentTaskId}); return task;
@@ -111,9 +117,9 @@ export class Store {
   ensureEnvironment(botId:string,profile:'ephemeral'|'persistent'|'service') {
     this.bot(botId);const existing=this.get<{profile:string}>('SELECT * FROM bot_environments WHERE botId=?',botId);
     if(existing&&existing.profile!==profile)throw new AppError(409,'Bot environment profile cannot change implicitly');
-    this.db.prepare("INSERT OR IGNORE INTO bot_environments VALUES (?,?,?,'unprovisioned','none',?,NULL,NULL)").run(botId,profile,profile==='persistent'?`chestnut-bot-${botId}`:profile==='service'?`chestnut-env-${botId}`:'per-run',Date.now());
+    this.db.prepare("INSERT OR IGNORE INTO bot_environments(botId,profile,containerName,state,networkPolicy,updatedAt,containerId,imageId) VALUES (?,?,?,'unprovisioned','none',?,NULL,NULL)").run(botId,profile,profile==='persistent'?`chestnut-bot-${botId}`:profile==='service'?`chestnut-env-${botId}`:'per-run',Date.now());
   }
-  environment(botId:string) { this.bot(botId);return this.get<{botId:string;profile:string;containerName:string;state:string;networkPolicy:string;containerId:string|null;imageId:string|null}>('SELECT * FROM bot_environments WHERE botId=?',botId) ?? null; }
+  environment(botId:string) { this.bot(botId);return this.get<{botId:string;profile:string;containerName:string;state:string;networkPolicy:string;containerId:string|null;imageId:string|null;imageRef:string|null}>('SELECT * FROM bot_environments WHERE botId=?',botId) ?? null; }
   observeEnvironment(botId:string,observed:{containerId:string;imageId:string;state:'running'|'stopped'}) {
     const existing=this.environment(botId);if(!existing)throw new Error('Bot environment is not registered');
     if(existing.containerId && existing.containerId!==observed.containerId)throw new Error('Persistent bot container identity changed; explicit recovery required');
@@ -127,8 +133,8 @@ export class Store {
   claim(workerId: string, now=Date.now(), ttl=15000): Run | null {
     return this.tx(() => {
       this.recoverInner(now);
-      if (this.get("SELECT id FROM runs WHERE state='running' LIMIT 1") || this.get('SELECT runId FROM quarantines LIMIT 1')) return null;
-      const task=this.get<Task>(`SELECT t.* FROM tasks t WHERE t.state='queued' AND (t.parentTaskId IS NULL OR EXISTS (SELECT 1 FROM tasks p WHERE p.id=t.parentTaskId AND p.state IN ('succeeded','failed'))) ORDER BY t.createdAt,t.rowid LIMIT 1`);
+      if (this.get("SELECT id FROM runs WHERE state='running' LIMIT 1") || this.get("SELECT requestId FROM environment_operations WHERE state='running' LIMIT 1") || this.get('SELECT runId FROM quarantines LIMIT 1')) return null;
+      const task=this.get<Task>(`SELECT t.* FROM tasks t WHERE t.state='queued' AND NOT EXISTS (SELECT 1 FROM environment_operations o WHERE o.botId=t.botId AND o.state IN ('queued','running','uncertain')) AND (t.parentTaskId IS NULL OR EXISTS (SELECT 1 FROM tasks p WHERE p.id=t.parentTaskId AND p.state IN ('succeeded','failed'))) ORDER BY t.createdAt,t.rowid LIMIT 1`);
       if (!task) return null;
       const id=randomUUID(),token=randomUUID();
       this.db.prepare("INSERT INTO runs(id,taskId,botId,workerId,token,state,leaseUntil,startedAt) VALUES (?,?,?,?,?,'running',?,?)").run(id,task.id,task.botId,workerId,token,now+ttl,now);

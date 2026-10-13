@@ -83,6 +83,8 @@ CHESTNUT_DATA_DIR=/home/you/chestnut-persistent
 
 Environment页管理包/HTTPS域名白名单与停止环境；默认都不允许。包安装通过固定可信下载器验证Debian签名和SHA256，导入后只在network-none的Bot里安装。下载器明确使用bridge但不挂载Bot数据/凭据；这不是通用网络出口。
 
+Environment 页新增可选的 **Bot Chromium 桌面** 与 **停止状态文件快照/显式恢复**。Agent 通过本任务私有 broker 截图、点击、输入、按键和切换浏览器窗口，管理页轮询同一 Bot 的屏幕。首版只允许容器内离线页面；快照包含 rootfs 和 workspace 文件，排除受管浏览器登录、进程内存与宿主控制数据。恢复先创建保护快照，失败保留旧环境并阻断新任务，需显式恢复保护版本。它们仍未经真实 Linux/Docker 验收，配置、限额和恢复步骤见 [桌面与快照](docs/desktop-snapshots.md)。
+
 Schedules页支持一次性任务和带IANA时区的5段cron，持久化触发、暂停/恢复、历史、重启去重与重叠跳过。[排期语义](docs/schedules.md)
 
 Telegram适配器只接受指定owner的指定私聊，独立长轮询进程处理状态、steer、cancel和follow-up。token只进渠道进程；通知有持久账本，发送结果不明时不盲重发。[配置与待验收项](docs/telegram-channel.md)

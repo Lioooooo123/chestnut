@@ -8,6 +8,7 @@ export const ENVIRONMENT_CAPABILITIES = ['CHOWN','DAC_OVERRIDE','FOWNER','FSETID
 export interface StableOptions {
   dataRoot:string; image:string; canMutate:()=>boolean; canExecute:()=>boolean;
   expectedContainerId?:string|null; expectedImageId?:string|null;
+  desktop?:boolean;
   onEnvironment?:(state:PersistentEnvironmentState)=>void;
 }
 const id=(value:string)=>{if(!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$/.test(value))throw new Error('Invalid environment identity');return value;};
@@ -20,6 +21,7 @@ export function stableCreateArgs(botId:string,o:StableOptions):string[]{
     '--cap-drop','ALL',...ENVIRONMENT_CAPABILITIES.flatMap(cap=>['--cap-add',cap]),'--security-opt','no-new-privileges',
     '--pids-limit','128','--memory','1024m','--memory-swap','1024m','--cpus','1','--user','0:0','--workdir','/workspace',
     '--mount',`type=bind,source=${path(join(resolve(o.dataRoot),'bots',id(botId),'workspace'))},target=/workspace`,
+    ...(o.desktop?['--tmpfs','/tmp:rw,nosuid,nodev,size=268435456,mode=1777']:[]),
     '--entrypoint','node',o.image,'-e','setInterval(() => {}, 60000)'];
 }
 export function verifyStableInspection(c:any,botId:string,o:StableOptions,imageId:string):void{
@@ -31,7 +33,8 @@ export function verifyStableInspection(c:any,botId:string,o:StableOptions,imageI
   if(h.Devices?.length||h.DeviceRequests?.length||h.ExtraHosts?.length||h.VolumesFrom?.length||h.Binds?.length||Object.keys(h.PortBindings??{}).length||(h.PidMode&&h.PidMode!=='')||h.IpcMode!=='private'||h.CgroupnsMode!=='private'||(h.UTSMode&&h.UTSMode!=='')||(h.UsernsMode&&h.UsernsMode!=='')||(h.RestartPolicy?.Name&&h.RestartPolicy.Name!=='no'))throw new Error('Stable environment unauthorized host access');
   if(h.Memory!==1073741824||h.MemorySwap!==1073741824||h.PidsLimit!==128||h.NanoCpus!==1000000000)throw new Error('Stable environment resource controls mismatch');
   const mounts=c.Mounts;
-  if(!Array.isArray(mounts)||mounts.length!==1||mounts[0].Type!=='bind'||mounts[0].Source!==join(resolve(o.dataRoot),'bots',botId,'workspace')||mounts[0].Destination!=='/workspace'||mounts[0].RW!==true||(mounts[0].Propagation&&mounts[0].Propagation!=='rprivate'))throw new Error('Stable environment must mount only its workspace, never task or broker sockets');
+  const workspace=Array.isArray(mounts)?mounts.find(m=>m.Destination==='/workspace'):null;
+  if(!Array.isArray(mounts)||mounts.length!==(o.desktop?2:1)||workspace?.Type!=='bind'||workspace.Source!==join(resolve(o.dataRoot),'bots',botId,'workspace')||workspace.RW!==true||(workspace.Propagation&&workspace.Propagation!=='rprivate')||JSON.stringify(h.Tmpfs??{})!==JSON.stringify(o.desktop?{'/tmp':'rw,nosuid,nodev,size=268435456,mode=1777'}:{})||(o.desktop&&!mounts.some(m=>m.Type==='tmpfs'&&m.Destination==='/tmp'&&m.RW===true)))throw new Error('Stable environment mounts mismatch; no task or broker mounts allowed');
   const allowed=new Set(['PATH','NODE_VERSION','YARN_VERSION','HOME','PI_CODING_AGENT_DIR','PI_OFFLINE','PI_NO_UPDATE_CHECK']);
   if(config.Env?.some((e:string)=>!allowed.has(e.split('=',1)[0])))throw new Error('Unexpected stable environment variable');
 }
@@ -42,10 +45,12 @@ export class StableEnvironment {
   private async image(requireResources=true){this.fence();const info=JSON.parse(await this.runner.command(['info','--format','{{json .}}']));this.fence();assertRootless(info);if(requireResources)assertResourceControls(info);
     if(!requireResources&&this.options.expectedImageId)return this.options.expectedImageId;
     const image=JSON.parse(await this.runner.command(['image','inspect',this.options.image]));this.fence();
-    if(!Array.isArray(image)||image.length!==1||typeof image[0].Id!=='string'||image[0].Config?.Labels?.['org.chestnut.pi.commit']!==PI_SOURCE_COMMIT)throw new Error('Stable environment requires the pinned source image');return image[0].Id as string;}
+    if(!Array.isArray(image)||image.length!==1||typeof image[0].Id!=='string'||image[0].Config?.Labels?.['org.chestnut.pi.commit']!==PI_SOURCE_COMMIT)throw new Error('Stable environment requires the pinned source image');if(this.options.desktop&&(image[0].Config?.Labels?.['org.chestnut.desktop']!=='1'||image[0].Config?.Labels?.['org.chestnut.desktop.browser']!=='chromium'))throw new Error('Build the desktop source image first; sandbox fallback is forbidden');return image[0].Id as string;}
   private async inspect(){this.fence();const names=(await this.runner.command(['container','ls','--all','--filter',`name=^/${stableName(this.botId)}$`,'--format','{{.ID}}'])).trim();this.fence();if(!names)return undefined;
     const values=JSON.parse(await this.runner.command(['container','inspect',stableName(this.botId)]));this.fence();if(!Array.isArray(values)||values.length!==1)throw new Error('Invalid stable environment inspection');return values[0];}
   private observe(c:any){this.options.expectedContainerId??=c.Id;this.options.expectedImageId??=c.Image;this.options.onEnvironment?.({containerId:c.Id,imageId:c.Image,state:c.State.Running?'running':'stopped'});}
+  async inspection(){const image=await this.image(),c=await this.inspect();verifyStableInspection(c,this.botId,this.options,image);return c;}
+  async desktopCommand(wrapper:string,input:unknown){this.fence(true);if(!this.options.desktop)throw new Error('Desktop is not enabled');const c=await this.inspection();if(!c.State.Running)throw new Error('Desktop environment is stopped');this.fence(true);const output=await this.runner.command(['exec','--user','1000:1000',stableName(this.botId),'node','-e',wrapper,JSON.stringify(input)],20000);this.fence(true);return output;}
   async ensureRunning(){this.fence(true);const workspace=join(resolve(this.options.dataRoot),'bots',this.botId,'workspace');
     if(await realpath(workspace)!==workspace||(await lstat(workspace)).isSymbolicLink())throw new Error('Stable workspace must be canonical');
     const image=await this.image();let c=await this.inspect();this.fence(true);

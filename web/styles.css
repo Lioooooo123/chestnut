@@ -35,3 +35,6 @@
 /* WebKit's native select can ignore min-height; a styled native select retains
    keyboard/popup behavior while providing a phone-sized touch target. */
 @media(max-width:600px){.management-form select{appearance:none;min-height:44px;line-height:1.4;padding-right:34px;background-image:linear-gradient(45deg,transparent 50%,#647552 50%),linear-gradient(135deg,#647552 50%,transparent 50%);background-size:6px 6px;background-position:right 17px center,right 11px center;background-repeat:no-repeat}.management-view button{min-height:44px}}
+
+.desktop-screen { display:block; width:100%; max-width:1280px; height:auto; border:1px solid var(--border); border-radius:12px; background:#eceee7; }
+.desktop-screen[hidden] { display:none; }

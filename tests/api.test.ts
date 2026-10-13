@@ -11,6 +11,25 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+test('desktop/snapshot API remains declarative, Bot scoped and explicit about file restore',async()=>{
+  const s=new Store(':memory:'),c=config({CHESTNUT_MODE:'pi',CHESTNUT_SANDBOX_PROFILE:'service',CHESTNUT_EXPERIMENTAL_SERVICE:'1',CHESTNUT_DESKTOP_ENABLED:'1'}),api=createApi(s,c);
+  try{const bot=s.createBot('Desktop'),other=s.createBot('Other'),base=`/api/bots/${bot.id}`,requestId=randomUUID(),snapshotId=randomUUID();s.db.prepare('INSERT INTO environment_snapshots VALUES(?,?,?,?,?)').run(snapshotId,bot.id,JSON.stringify({id:snapshotId,botId:bot.id,format:1}),'fixture-hash',Date.now());
+    assert.equal((await request(api,'POST',base+'/snapshots',{requestId,action:'restore',snapshotId})).status,409);
+    assert.equal((await request(api,'POST',`/api/bots/${other.id}/snapshots`,{requestId,action:'restore',snapshotId,confirmed:true})).status,404);
+    assert.equal((await request(api,'POST',base+'/desktop',{requestId,op:'click'})).status,400);
+    assert.equal((await request(api,'POST',base+'/snapshots',{requestId,action:'restore',snapshotId,confirmed:true})).status,202);
+    assert.equal((await request(api,'POST',base+'/snapshots',{requestId,action:'restore',snapshotId,confirmed:true})).status,202);
+    assert.equal(s.get<any>('SELECT count(*) count FROM environment_operations').count,1);assert.equal(s.get<any>('SELECT * FROM environment_operations').state,'queued');
+    assert.equal((await request(api,'POST',base+'/tasks',{messageId:randomUUID(),prompt:'wait'})).status,409);
+    assert.equal((await request(api,'GET',base+'/desktop/frame?session='+randomUUID())).status,404);
+    const session=randomUUID();s.db.prepare("INSERT INTO desktop_sessions VALUES(?,?,'running','about:blank',?,?,NULL)").run(bot.id,session,Date.now(),Buffer.from('fixture PNG bytes, not an image test').toString('base64'));
+    assert.equal((await request(api,'GET',base+'/desktop/frame?session='+randomUUID())).status,409);assert.equal((await request(api,'GET',base+'/desktop/frame?session='+session)).status,200);
+    assert.equal((await request(api,'GET',`/api/bots/${other.id}/desktop/frame?session=${session}`)).status,404);
+    assert.equal((await request(api,'GET',base+'/desktop/frame?session='+session,undefined,{origin:'https://attacker.example'})).status,403);
+    const status=JSON.parse((await request(api,'GET',base+'/desktop')).body);assert.equal(Object.hasOwn(status.session,'png'),false);assert.equal(Object.hasOwn(status,'token'),false);
+  }finally{api.close();s.close();}
+});
+
 test('Bot creation receipts deduplicate and task/command receipts read current state without mutation',async()=>{
   const s=new Store(':memory:'),api=createApi(s,config());
   try{

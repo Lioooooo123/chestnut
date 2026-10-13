@@ -34,9 +34,15 @@ Run from the repository root:
 
 These are dependency-free, socket-free controller tests with a minimal DOM and a mocked API. They cover empty/create flows, duplicate submits, retry IDs, steering/follow-ups, cancellation, interrupted states, event cursors, safe text rendering, draft retention, offline/quarantine states, and polling visibility.
 
-The suite has 45 passing controller tests, including reload, lost acknowledgments, creation deduplication, expired Steer recovery, large journals including escaped pending signatures, explicit same-ID retries and storage-quota failures. They are not real-browser or visual tests. The latest macOS pass separately exercised Safari Bot creation, task/Steer/Follow-up/Cancel, same-tab draft reload, API/Worker restart and history recovery, plus 320/390px read-only WebKit frames. These are simulated tasks, not real AI or real phone hardware; see `docs/mvp-acceptance.md` and `docs/verification.md`.
+The suite has 48 passing controller tests, including reload, lost acknowledgments, creation deduplication, expired Steer recovery, large journals including escaped pending signatures, explicit same-ID retries and storage-quota failures. They are not real-browser or visual tests. The latest macOS pass separately exercised Safari Bot creation, task/Steer/Follow-up/Cancel, same-tab draft reload, API/Worker restart and history recovery, plus 320/390px read-only WebKit frames. These are simulated tasks, not real AI or real phone hardware; see `docs/mvp-acceptance.md` and `docs/verification.md`.
 
 
 ## New management UI verification
 
 The Environment and Schedules additions were verified on 2026-10-12 using socket-free mocked-DOM tests, `node --check web/app.js`, and whitespace checks. These new views have **not** had a real-browser, screenshot, mobile, screen-reader or visual pass in this executor. Earlier Safari results cover the older dashboard only. No live Docker/service persistence, package installation, HTTPS fetch, scheduler delivery or Telegram message is claimed. See `docs/dashboard-management.md` for coverage and manual acceptance steps.
+
+## Desktop and file snapshots
+
+Environment shows a Bot/session-scoped PNG screen, capture request, file snapshot inventory, operation phases and explicit restore/recovery confirmations. An accepted request is queued, never presented as a completed restore. Switching Bots clears old screen/inventory; late responses are ignored. Stable polling preserves unchanged controls. Machine requests use durable server receipts but are not included in the chat reload journal: after a lost response or page reload, inspect operation history before sending a new request.
+
+The 2026-10-13 Safari check used a local API with seeded sample pixels/snapshot metadata and no Worker/Docker/model: screen/session ownership, restore confirmation, actual durable queued restore, disabled conflicting actions and cross-Bot clearing and identical queued request after API restart/reload passed. A separate Safari-only HTML fixture accepted typing/clicking and returned its greeting; this is not the Agent computer backend. Real Chromium input/screenshots, sandbox policy, rootless Linux and file recovery remain gated by `docs/desktop-snapshots.md`. Older management verification statements above describe their earlier stage.

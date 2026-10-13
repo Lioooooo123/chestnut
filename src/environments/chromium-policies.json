@@ -1,0 +1,13 @@
+{
+  "ProxyMode":"fixed_servers",
+  "ProxyServer":"http://127.0.0.1:8787",
+  "ProxyBypassList":"<-loopback>",
+  "URLBlocklist":["*"],
+  "URLAllowlist":["http://127.0.0.1:8787/","about:blank","chrome://sandbox/"],
+  "QuicAllowed":false,
+  "WebRtcIPHandling":"disable_non_proxied_udp",
+  "DeveloperToolsAvailability":2,
+  "PasswordManagerEnabled":false,
+  "BrowserSignin":0,
+  "SyncDisabled":true
+}

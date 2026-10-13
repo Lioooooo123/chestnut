@@ -24,6 +24,9 @@ import { StableEnvironment } from './environments/stable-docker.ts';
 import { ServiceBackend } from './environments/service-backend.ts';
 import { startEnvironmentBroker } from './environments/broker.ts';
 import { startMemoryBroker } from './memory/broker.ts';
+import { EnvironmentOperations } from './environments/operations.ts';
+import { BotSnapshots } from './environments/snapshots.ts';
+import { BotDesktop } from './environments/desktop.ts';
 
 export interface WorkerDependencies { acquireLock?:typeof acquireEnvironmentLock; gateway?:typeof startModelGateway; memoryBroker?: typeof startMemoryBroker; cleanupPersistent?:typeof cleanupPersistentBot; environmentBroker?:typeof startEnvironmentBroker; stableEnvironment?:(botId:string,options:ConstructorParameters<typeof StableEnvironment>[1],runner:ConstructorParameters<typeof StableEnvironment>[2])=>StableEnvironment; cleanupEphemeral?:typeof cleanupStaleContainer }
 export type AdapterFactory = (run: Run, gatewayDirectory: string) => WorkerAdapter;
@@ -60,6 +63,7 @@ export class Worker {
           await this.recoverQuarantine(q);
         }
         await this.processEnvironmentStops();
+        await this.processEnvironmentOperations();
         const run=this.store.claim(this.id);
         if(run){await this.execute(run);maintain();}else await sleep(quarantines.length?2000:200);
       }
@@ -72,9 +76,34 @@ export class Worker {
       try{lock=await (this.deps.acquireLock??acquireEnvironmentLock)(join(this.c.root,'control','os-locks'),request.botId);if(!lock)continue;
         const current=policies.stopStatus(request.botId);if(current?.requestId!==request.requestId||current.state!=='pending'){await lock.release();lock=null;continue;}
         const env=this.store.environment(request.botId);
-        if(env?.containerId)await new StableEnvironment(request.botId,{dataRoot:this.c.sandboxRoot,image:this.c.image,expectedContainerId:env.containerId,expectedImageId:env.imageId,canMutate:()=>!!lock?.isHeld(),canExecute:()=>false,onEnvironment:state=>this.store.observeEnvironment(request.botId,state)},lock.runner).stop();
+        if(env?.containerId)await new StableEnvironment(request.botId,{dataRoot:this.c.sandboxRoot,image:env.imageRef??this.c.image,desktop:this.c.desktopEnabled,expectedContainerId:env.containerId,expectedImageId:env.imageId,canMutate:()=>!!lock?.isHeld(),canExecute:()=>false,onEnvironment:state=>this.store.observeEnvironment(request.botId,state)},lock.runner).stop();
         await lock.release();lock=null;policies.finishStop(request.botId,request.requestId);
       }catch(error){policies.finishStop(request.botId,request.requestId,String(error));}finally{if(lock)await lock.release().catch(()=>{});}
+    }
+  }
+  private async processEnvironmentOperations(){
+    if(this.c.mode!=='pi'||this.c.sandboxProfile!=='service')return;
+    const operations=new EnvironmentOperations(this.store);
+    for(const queued of this.store.all<import('./environments/operations.ts').EnvironmentOperation>("SELECT * FROM environment_operations WHERE state IN ('queued','running') ORDER BY updatedAt LIMIT 10")){
+      if(this.stopping)return;let lock:EnvironmentLock|null=null;let operation=queued;
+      try{
+        lock=await (this.deps.acquireLock??acquireEnvironmentLock)(join(this.c.root,'control','os-locks'),queued.botId);if(!lock)continue;
+        operation=operations.get(queued.botId,queued.requestId);if(operation.state==='running'){const owner=operation.ownerId?this.store.get<{expiresAt:number}>('SELECT expiresAt FROM workers WHERE id=?',operation.ownerId):null;if(owner&&owner.expiresAt>Date.now())continue;operations.uncertain(operation);continue;}if(operation.state!=='queued')continue;
+        const admitted=this.store.tx(()=>{if(this.store.get("SELECT id FROM runs WHERE state='running'")||this.store.get("SELECT requestId FROM environment_operations WHERE state='running'"))return false;return this.store.db.prepare("UPDATE environment_operations SET state='running',ownerId=?,updatedAt=? WHERE requestId=? AND state='queued'").run(this.id,Date.now(),operation.requestId).changes===1;});if(!admitted)continue;
+        this.store.ensureEnvironment(operation.botId,'service');const env=this.store.environment(operation.botId),workspace=join(this.c.sandboxRoot,'bots',operation.botId,'workspace');await mkdir(workspace,{recursive:true,mode:0o700});
+        const authorize=()=>!this.stopping&&!!lock?.isHeld();
+        const environment=new StableEnvironment(operation.botId,{dataRoot:this.c.sandboxRoot,image:env?.imageRef??this.c.image,desktop:this.c.desktopEnabled,expectedContainerId:env?.containerId,expectedImageId:env?.imageId,canMutate:authorize,canExecute:authorize,onEnvironment:state=>this.store.observeEnvironment(operation.botId,state)},lock.runner),snapshots=new BotSnapshots(this.store,this.c.root,environment),payload=JSON.parse(operation.payload);
+        let result:unknown;
+        if(operation.action!=='desktop')this.store.db.prepare("UPDATE desktop_sessions SET state='stopped',png=NULL,capturedAt=NULL WHERE botId=?").run(operation.botId);
+        if(operation.action==='desktop'){operations.phase(operation,'desktop-start');if(!this.c.desktopEnabled)throw new Error('Desktop disabled');result=await new BotDesktop(this.store,operation.botId,environment,authorize).perform({op:'screenshot'});result={...(result as any),png:undefined};}
+        else if(operation.action==='snapshot'){operations.phase(operation,'stopping');result=await snapshots.create(operation);}
+        else if(operation.action==='restore')result=await snapshots.restore(operation,payload.snapshotId);
+        else if(operation.action==='rollback'){const previous=operations.get(operation.botId,payload.operationId);if(previous.state!=='superseded')throw new Error('Recovery target changed');result=await snapshots.rollback(operation,previous);}
+        else if(operation.action==='contain'){const previous=operations.get(operation.botId,payload.operationId);if(previous.result&&JSON.parse(previous.result).protectionId)throw new Error('Use protection rollback');operations.phase(operation,'verifying-stop');await environment.stop();result={contained:previous.requestId};this.store.db.prepare("UPDATE environment_operations SET state='contained',updatedAt=? WHERE requestId=? AND state='superseded'").run(Date.now(),previous.requestId);}
+        else throw new Error('Unsupported operation');
+        if(operation.action!=='desktop')this.store.db.prepare("UPDATE desktop_sessions SET state='stopped',png=NULL,capturedAt=NULL WHERE botId=?").run(operation.botId);
+        await lock.release();lock=null;operations.finish(operation,result);
+      }catch(error){operations.uncertain(operation,error);}finally{if(lock)await lock.release().catch(()=>{operations.uncertain(operation);});}
     }
   }
   private persistentOptions(botId:string,canMutate:()=>boolean):PersistentCleanupOptions {
@@ -99,7 +128,7 @@ export class Worker {
         await (this.deps.cleanupEphemeral??cleanupStaleContainer)(q,lock.runner);
         const env=this.store.environment(q.botId);
         if(env?.imageId)await cleanupPackageDownloaders({botId:q.botId,runId:q.runId,expectedImageId:env.imageId,canMutate:()=>!!lock?.isHeld()},lock.runner);
-        await new StableEnvironment(q.botId,{dataRoot:this.c.sandboxRoot,image:this.c.image,expectedContainerId:env?.containerId,expectedImageId:env?.imageId,canMutate:()=>!!lock?.isHeld(),canExecute:()=>false,onEnvironment:state=>this.store.observeEnvironment(q.botId,state)},lock.runner).stop();
+        await new StableEnvironment(q.botId,{dataRoot:this.c.sandboxRoot,image:env?.imageRef??this.c.image,desktop:this.c.desktopEnabled,expectedContainerId:env?.containerId,expectedImageId:env?.imageId,canMutate:()=>!!lock?.isHeld(),canExecute:()=>false,onEnvironment:state=>this.store.observeEnvironment(q.botId,state)},lock.runner).stop();
         await lock.release();lock=null;
       }else if(this.c.mode==='pi')await cleanupStaleContainer(q);
       if(packageOperations.length){policies.containPackages(q.runId);this.store.noteQuarantine(q.runId,'Operator package reconciliation required: a previous package import/install did not durably complete. Environment is stopped; inspect package state, then explicitly confirm reconciliation.');return;}
@@ -112,6 +141,8 @@ export class Worker {
     let persistentOptions:PersistentCleanupOptions|undefined;
     let stableEnvironment:StableEnvironment|undefined;
     let environmentBroker:Awaited<ReturnType<typeof startEnvironmentBroker>>|undefined;
+    let desktop:BotDesktop|undefined;
+    let desktopTimer:ReturnType<typeof setInterval>|undefined,desktopWork:Promise<unknown>|undefined;
     let keepEnvironment=false;
     let packageQuarantine:string|undefined;
     let gateway:Awaited<ReturnType<typeof startModelGateway>>|undefined;
@@ -149,17 +180,19 @@ export class Worker {
         if((await lstat(path)).isSymbolicLink()||await realpath(path)!==resolve(path))throw new Error('Unsafe sandbox path');
       }
       if(this.c.sandboxProfile==='service'){
-        const env=this.store.environment(run.botId),options={dataRoot:this.c.sandboxRoot,image:this.c.image,expectedContainerId:env?.containerId,expectedImageId:env?.imageId,canMutate:()=>!!environmentLock?.isHeld(),canExecute:()=>accepting&&!this.stopping&&this.store.mayExecute(run)&&(!grant||grant.isCurrent())&&!!environmentLock?.isHeld(),onEnvironment:(state:Parameters<Store['observeEnvironment']>[1])=>this.store.observeEnvironment(run.botId,state)};
+        const env=this.store.environment(run.botId),options={dataRoot:this.c.sandboxRoot,image:env?.imageRef??this.c.image,desktop:this.c.desktopEnabled,expectedContainerId:env?.containerId,expectedImageId:env?.imageId,canMutate:()=>!!environmentLock?.isHeld(),canExecute:()=>accepting&&!this.stopping&&this.store.mayExecute(run)&&(!grant||grant.isCurrent())&&!!environmentLock?.isHeld(),onEnvironment:(state:Parameters<Store['observeEnvironment']>[1])=>this.store.observeEnvironment(run.botId,state)};
         stableEnvironment=this.deps.stableEnvironment?.(run.botId,options,environmentLock!.runner)??new StableEnvironment(run.botId,options,environmentLock!.runner);
-        environmentBroker=await (this.deps.environmentBroker??startEnvironmentBroker)({socketPath:join(gatewayDirectory,'environment.sock'),environment:stableEnvironment,authorize:options.canExecute,installPackages:async(packages,requestId)=>{
+        if(this.c.desktopEnabled)desktop=new BotDesktop(this.store,run.botId,stableEnvironment,options.canExecute);
+        environmentBroker=await (this.deps.environmentBroker??startEnvironmentBroker)({computer:desktop?input=>desktop!.perform(input):undefined,socketPath:join(gatewayDirectory,'environment.sock'),environment:stableEnvironment,authorize:options.canExecute,installPackages:async(packages,requestId)=>{
           const policies=new EnvironmentPolicies(this.store),policy=policies.get(run.botId),env=this.store.environment(run.botId);if(!env?.containerId||!env.imageId)throw new Error('Stable environment identity is not ready');
-          const result=await installGovernedPackages({botId:run.botId,runId:run.id,requestId,dataRoot:this.c.sandboxRoot,image:this.c.image,expectedContainerId:env.containerId,expectedImageId:env.imageId,allowedPackages:policy.allowedPackages,requestedPackages:packages,canMutate:options.canMutate,canExecute:()=>options.canExecute()&&policies.get(run.botId).revision===policy.revision,onBeforeImport:()=>policies.beginPackage(run.botId,run.id,requestId),onQuarantine:reason=>{packageQuarantine=reason;policies.packageNeedsReview(run.botId,run.id,requestId,reason);}},environmentLock!.runner);
+          const result=await installGovernedPackages({botId:run.botId,runId:run.id,requestId,dataRoot:this.c.sandboxRoot,image:env.imageRef??this.c.image,expectedContainerId:env.containerId,expectedImageId:env.imageId,allowedPackages:policy.allowedPackages,requestedPackages:packages,canMutate:options.canMutate,canExecute:()=>options.canExecute()&&policies.get(run.botId).revision===policy.revision,onBeforeImport:()=>policies.beginPackage(run.botId,run.id,requestId),onQuarantine:reason=>{packageQuarantine=reason;policies.packageNeedsReview(run.botId,run.id,requestId,reason);}},environmentLock!.runner);
           policies.completePackage(requestId);this.store.appendRunEvent(run,'environment.packages.installed',result);return result;
         },fetchUrl:async(url)=>{const policies=new EnvironmentPolicies(this.store),policy=policies.get(run.botId);return governedFetch(url,policy.allowedHosts,()=>options.canExecute()&&policies.get(run.botId).revision===policy.revision);},onEvent:(type,data)=>this.store.appendRunEvent(run,type,data)});
       }
       if(this.c.mode==='pi')gateway=await (this.deps.gateway ?? startModelGateway)({socketPath:join(gatewayDirectory,gatewaySocketName),apiKey:apiProtocol==='responses'?undefined:this.c.apiKey,getApiKey:grant?signal=>grant.apiKey(signal):undefined,apiProtocol,model,authorize:()=>this.store.mayExecute(run)&&!this.stopping&&(!grant||grant.isCurrent())&&(!environmentLock||environmentLock.isHeld())});
       adapter=this.factory?.(run,gatewayDirectory) ?? (this.c.mode==='demo'?new FakeAdapter({delayMs:this.c.demoDelayMs??2500}):new PiRpcAdapter(stableEnvironment?new ServiceBackend(stableEnvironment,{dataRoot:this.c.sandboxRoot,gatewayDirectory,model,apiProtocol,image:this.c.image,runner:environmentLock!.runner}):persistentOptions?new PersistentDockerBackend({...persistentOptions,gatewaySocketName,model,apiProtocol,networkPolicy:'none',canStart:()=>!this.stopping&&this.store.mayExecute(run)&&!!environmentLock?.isHeld(),runner:environmentLock!.runner}):new RootlessDockerBackend({dataRoot:this.c.sandboxRoot,gatewayDirectory,model,apiProtocol,image:this.c.image}),{requireEnvironmentReady:this.c.sandboxProfile==='service',beforePrompt:()=>{if(this.stopping||!this.store.mayExecute(run)||(grant&&!grant.isCurrent())||(environmentLock&&!environmentLock.isHeld()))throw new Error('Run no longer owns its execution lease');},beforeSteer:()=>{if(this.stopping||!this.store.mayExecute(run)||(grant&&!grant.isCurrent())||(environmentLock&&!environmentLock.isHeld()))throw new Error('Run no longer accepts steering');}}));
       this.active=adapter;
+      if(desktop)desktopTimer=setInterval(()=>{if(!ready||!accepting||desktopWork||!environmentBroker?.isIdle())return;desktopWork=desktop!.perform({op:'screenshot'}).catch(()=>{}).finally(()=>{desktopWork=undefined;});},3000);
       heartbeat=setInterval(()=>{
         if((grant&&!grant.isCurrent())||(environmentLock&&!environmentLock.isHeld())||!this.store.renew(run)){leaseLost=true;accepting=false;void adapter?.cancel().catch(()=>{});void gateway?.close().catch(()=>{});}
       },2000);
@@ -219,6 +252,7 @@ export class Worker {
     finally{
       accepting=false;
       if(commandTimer)clearInterval(commandTimer);
+      if(desktopTimer)clearInterval(desktopTimer);await desktopWork;
       await Promise.all([commandWork,cancelWork]);
       let runnerClean=true,brokersClean=true,stableClean=this.c.sandboxProfile==='ephemeral'||!!environmentLock?.isHeld();
       try{await adapter?.dispose();}catch(e){runnerClean=false;error=`Sandbox cleanup could not be verified: ${String(e)}`;}
@@ -231,7 +265,7 @@ export class Worker {
       if(environmentBroker&&!environmentBroker.isHealthy()){aborted=true;error??='Environment command outcome uncertain; review before resubmission';}
       if(stableEnvironment){
         keepEnvironment=runnerClean&&brokersClean&&settled&&!error&&!modelError&&!aborted&&!this.stopping&&!leaseLost&&environmentBroker?.isHealthy()===true&&this.store.mayExecute(run);
-        try{if(!keepEnvironment)await stableEnvironment.stop();}catch(e){stableClean=false;error=`Stable environment reconciliation failed: ${String(e)}`;}
+        try{if(!keepEnvironment){await stableEnvironment.stop();this.store.db.prepare("UPDATE desktop_sessions SET state='stopped',png=NULL,capturedAt=NULL WHERE botId=?").run(run.botId);}}catch(e){stableClean=false;error=`Stable environment reconciliation failed: ${String(e)}`;}
       }
       if(persistentOptions){try{persistentOptions=this.persistentOptions(run.botId,()=>!!environmentLock?.isHeld());await (this.deps.cleanupPersistent??cleanupPersistentBot)(run,persistentOptions,environmentLock!.runner);}catch(e){stableClean=false;error=`Persistent bot stop unverified: ${String(e)}`;}}
       if(packageQuarantine&&runnerClean&&brokersClean&&stableClean)new EnvironmentPolicies(this.store).containPackages(run.id);
