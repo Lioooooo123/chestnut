@@ -1,6 +1,6 @@
 # Bot 桌面与文件快照（实验性）
 
-本版把 Chromium 桌面放在每个 Bot 的稳定 service 容器内。管理页显示与 Agent 相同的 Bot 屏幕，Agent 使用本轮私有 `environment_computer` 工具操作。它不是宿主桌面，也不开放公网 VNC、CDP 或带凭据的控制 URL。**当前只实现并离线测试了协调、工具与存储契约；真实 Linux/rootless Docker/Chromium 验收尚未执行。**
+本版把 Chromium 桌面放在每个 Bot 的稳定 service 容器内。管理页显示与 Agent 相同的 Bot 屏幕，Agent 使用本轮私有 `environment_computer` 工具操作。它不是宿主桌面，也不开放公网 VNC、CDP 或带凭据的控制 URL。**Mac Linux VM内真实文件、服务、快照恢复/保护rollback已验证；Chromium sandbox启动失败，截图/输入仍未通过。分项证据见 [最新验证](verification.md) 与 [浏览器阻塞](chromium-sandbox-blocker.md)。**
 
 ## 选择与启动
 
@@ -66,7 +66,7 @@ workspace 复制先使用可写 staging 目录，填充完毕后从子目录向�
 
 workspace 拒绝 symlink、hardlink、设备、socket 和其他特殊文件。Docker 生成的外层 tar 仅允许目录/常规文件和受支持索引，拒绝绝对路径、穿越、重复记录、links、devices 和扩展头；不接受用户上传或宿主 tar 解压。版本/归属/文件/manifest/archive 校验失败均拒绝。目录、归属、路径与锁 fence 同样核验。这些限额不是 Docker writable-layer 磁盘配额；其他运行日志和镜像仍能耗尽宿主磁盘。
 
-## Linux 实机验收门槛（未执行）
+## Linux 实机验收门槛（分项结果见最新验证）
 
 在明确授权的新测试环境，用新 Bot/数据目录且不使用真实账号或凭据：
 

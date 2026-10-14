@@ -1,6 +1,6 @@
 # Mac 本地 Linux VM 运行路径
 
-当前目标是在 Mac 的 Linux VM 中运行 Chestnut API、Worker 和 Bot 容器。Mac 只运行已有 VM 管理器、开发工具和浏览器；Bot root 是 Linux 容器 root，不是 macOS root。**此提交提供只读预检和运行域约定，并不宣称真实 Bot/桌面/快照在当前 VM 已验收。**
+当前目标是在 Mac 的 Linux VM 中运行 Chestnut API、Worker 和 Bot 容器。Mac 只运行已有 VM 管理器、开发工具和浏览器；Bot root 是 Linux 容器 root，不是 macOS root。**已完成下述真实容器文件/服务/快照验收并运行 loopback API/Worker；Chromium sandbox 仍受阻，真实模型未连接。**
 
 ## 先检查已有环境
 
@@ -21,9 +21,11 @@ VM 启动是另一个显式动作。本次用户已批准按原配置执行 `col
 
 Guest 为 Ubuntu 24.04.4 LTS / Linux aarch64，普通用户 UID 501。真实 util-linux flock 2.39.3 可用，guest home `/home/lioooooo123.guest` 与 `/tmp` 均为 ext4，已有 subuid 范围。**Node/npm、dockerd-rootless.sh、rootlesskit、newuidmap/newgidmap、slirp4netns 与用户 Docker socket均缺失。**现有 daemon 是 rootful，cgroup v2 + cgroupfs，不能直接供当前 Chestnut 运行。未运行 Bot 容器、Chromium、模型调用或文件快照实机测试；2 GiB 下的构建/桌面容量尚未测量，未擅自扩容。
 
-后续具体前提是在该 Linux guest 中提供 Node 24+、rootless Docker 及其依赖，确认既有 uid/gid mapping 与 systemd cgroup delegation，并使用普通 guest 用户的私有 socket/存储。不要修改默认 rootful daemon，不关闭 AppArmor/seccomp/user namespace 检查或 browser sandbox。新增 guest 服务、软件和任何权限/安全设置动作应按当前授权范围逐项核实；本提交没有执行安装或 rootless setup，也不要求另装 Docker Desktop/OrbStack。
+以上缺口是启动前历史状态。经用户明确批准，已在同一 guest 提供官方 Node 24.21.0 ARM64（SHA-256 `6ad1325edbdb5649c379b75a237147a666c95d4f9ae8d340fef2d1575d289ad2`），安装 uidmap、Docker 29.5.2 rootless extras、slirp4netns、dbus-user-session 及其依赖。补充 xz-utils 时仅更新了所需 liblzma5；没有更换原 Docker。Git 原本存在，检查误改的自动安装标记已还原。Node 置于 VM `/opt/chestnut-tools/node-v24.21.0-linux-arm64`，新建 VM `/usr/local/bin/node/npm/npx` 链接，未改 Mac 软件。
 
-当前资源断言还要求 daemon 报告 CPU quota 等控制。现有 Docker 的模板未提供 `CpuCfsQuota` 字段；未来 rootless 配置仍需检查真实 API/resource enforcement，不能为了兼容字段缺失直接删除 CPU 限制或放行。
+官方 `dockerd-rootless-setuptool.sh --force install` 创建/启用 UID 501 的 systemd 用户 Docker 服务；`--force` 仅允许保留同时运行的 rootful daemon。原 daemon/数据保留。已有 linger、subuid/subgid 范围与 CPU/memory/pids delegation 可用，不需扩大范围或添加全局 cgroup/sysctl 设置。用户 daemon 是 rootless + systemd cgroup v2，私有 socket `/run/user/501/docker.sock`。JSON 的 `CpuCfsQuota=true` 实测通过；此前模板报错是 CLI模板字段名称差异，并非删除资源断言的理由。
+
+原 2 CPU/约 2 GiB 配置下，原生 ARM64 源码镜像成功构建，未扩容。新镜像 tag 与旧容器 image identity 分开保存。当前 API/Worker 是真实 `pi/service`，不是 FakeAdapter；未连接模型/Telegram，未发 prompt，不能把它当成已工作的 AI 聊天。Chromium 出错与需批准的下一步见 [sandbox 阻塞](chromium-sandbox-blocker.md)。
 
 ## 把运行域留在 Linux guest
 
@@ -45,7 +47,7 @@ npm run pi:build
 
 选择新 guest-native 数据目录并完成 `npm run preflight -- --docker --data-dir <new-private-guest-path>`。`npm run dev` 必须在 guest 项目目录、普通 guest 用户和已核验的 rootless context 下运行，让 API/Worker、OS lock holder、gateway 与 Docker 同处 Linux。初始关闭 Telegram/自动模型维护，不配置真实凭据；纯桌面采集/快照由 Worker 操作队列执行，无需连接模型。桌面镜像另按 [desktop-snapshots.md](desktop-snapshots.md) 构建；使用 ARM64 原生镜像，不强制 amd64 或把 Rosetta 作为已验收依赖。
 
-API 继续只监听 guest `127.0.0.1`。Mac 浏览器访问须明确核验当前 VM 管理器的 loopback 转发；不要把 `CHESTNUT_HOST` 改成 `0.0.0.0` 或发布无认证控制端口。当前还没有搭建/验收此项目的转发和服务启动入口，因此此处不是“一键启动已完成”的说明。模型/ChatGPT 授权另行安全交接，不能从其他应用寻找凭据。
+API 继续只监听 guest `127.0.0.1`。Mac 浏览器访问须明确核验当前 VM 管理器的 loopback 转发；不要把 `CHESTNUT_HOST` 改成 `0.0.0.0` 或发布无认证控制端口。当前已使用原 Colima loopback 规则访问 Mac `http://127.0.0.1:4316`，并用 lsof确认仅127.0.0.1监听；未修改转发规则。模型/ChatGPT 授权另行安全交接，不能从其他应用寻找凭据。
 
 ## 保留的验收与恢复要求
 
@@ -56,3 +58,21 @@ VM 环境准备好后，先在新的项目测试目录验证真实 Linux flock�
 ## 与 Memoh 的取舍
 
 Memoh 的 [固定版本 Compose](https://github.com/felinics/Memoh/blob/d06cba8965549fea6feac30b66e439eeb5c81cc9/docker-compose.yml) 把管理服务放在 Linux 容器运行域并持久保存 containerd/data；该文件的 privileged/pid:host 管理容器不是 Chestnut 的配置。本方案借运行域思路，保留已有 rootless、锁和私有 broker约束，不增加 privileged nestedcontainerd。rootless前提参见 [Docker 官方说明](https://docs.docker.com/engine/security/rootless/)，已有 VM 管理器使用参见 [Colima 官方仓库](https://github.com/abiosoft/colima)。
+
+## 当前服务、重启与回退
+
+本次专用测试服务为 guest 用户的 `chestnut-acceptance-api.service` 和 `chestnut-acceptance-worker.service`。配置只引用独立 guest-native 源码/测试数据路径，环境文件0600，无模型/渠道凭据；API/Worker保留no-new-privileges并分别有256/512 MiB控制面内存上限，Bot资源仍按固定容器配置限制。两者启用并在线。服务重启后相同Bot的三个快照ID与Worker在线状态保持，文件/镜像旧版本保留。
+
+```sh
+# Mac调用已有guest连接；不要用sudo运行Worker
+colima --profile default ssh -- systemctl --user status chestnut-acceptance-api.service chestnut-acceptance-worker.service
+colima --profile default ssh -- systemctl --user restart chestnut-acceptance-api.service chestnut-acceptance-worker.service
+# 停止本次项目服务，保留数据/容器/快照
+colima --profile default ssh -- systemctl --user disable --now chestnut-acceptance-api.service chestnut-acceptance-worker.service
+# 如明确回退用户rootlessdaemon，先停止本次Worker，再只停止该用户服务
+colima --profile default ssh -- systemctl --user disable --now docker.service
+```
+
+这些是运行控制命令，不自动执行。不要停止系统级rootfulDocker或删除磁盘/profile/data。Node链接、包、用户unit和所有测试文件均保留并记录，未自动卸载。失败浏览器测试的三个锁holder在确认唯一marker/exe、无Docker子进程、容器停止且无exec后已人工式核验清理；marker改名保留为.reconciled，lock文件与rootfs不删除。
+
+真实通过：两Bot文件/loopback服务隔离、后台服务跨执行保留、whole-Bot stop/restart保留文件并停止服务、实际API/Worker快照创建、rootfs+workspace恢复、保护版本及真实部分恢复异常后的显式rollback；权限0775也在真实文件快照中校验。异常注入不是实际Worker SIGKILL；完整VM重启、恶意负载/磁盘压力、在线包安装、真实模型和Telegram仍未做。Chromium截图/点击/输入未通过，不能提供实际桌面PNG。

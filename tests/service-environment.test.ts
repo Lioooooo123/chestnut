@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, realpath, rm, symlink, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { StableEnvironment, stableCreateArgs, verifyStableInspection, ENVIRONMENT_CAPABILITIES, type StableOptions } from '../src/environments/stable-docker.ts';
+import { StableEnvironment, stableCreateArgs, verifyStableInspection, ENVIRONMENT_CAPABILITIES, DESKTOP_TMPFS_INIT, type StableOptions } from '../src/environments/stable-docker.ts';
 import { buildDockerArgs, PI_SOURCE_COMMIT } from '../src/sandbox/rootless-docker.ts';
 import type { DockerCommandRunner } from '../src/sandbox/persistent-docker.ts';
 import { PiRpcAdapter } from '../src/pi/rpc-adapter.ts';
@@ -413,4 +413,19 @@ test('durable unresolved package intent remains quarantined even without an in-m
     assert.match(f.store.quarantines()[0]!.reason, /Operator package reconciliation required/);
     assert.equal(f.store.environment(f.bot.id)?.state, 'quarantined');
   } finally { await f.cleanup(); }
+});
+
+test('real Docker CAP_ canonicalization and separate tmpfs declaration preserve exact policy',()=>{
+  const o={...options(),desktop:true},c:any=inspection(o);c.HostConfig.CapAdd=ENVIRONMENT_CAPABILITIES.map(cap=>'CAP_'+cap);c.HostConfig.Tmpfs={'/tmp':'rw,nosuid,nodev,size=268435456,mode=1777'};
+  assert.doesNotThrow(()=>verifyStableInspection(c,BOT,o,IMAGE_ID));
+  c.Mounts.push({Type:'tmpfs',Destination:'/tmp',RW:true});assert.doesNotThrow(()=>verifyStableInspection(c,BOT,o,IMAGE_ID));
+  for(const change of [(x:any)=>x.HostConfig.CapAdd.push('CAP_SYS_ADMIN'),(x:any)=>x.HostConfig.CapAdd.push('CAP_CHOWN'),(x:any)=>x.HostConfig.Tmpfs['/tmp']='rw,size=1g',(x:any)=>x.Mounts.push({Type:'bind',Source:'/outside',Destination:'/run/chestnut',RW:true}),(x:any)=>x.Mounts[1].RW=false]){const altered=structuredClone(c);change(altered);assert.throws(()=>verifyStableInspection(altered,BOT,o,IMAGE_ID));}
+});
+
+test('desktop bootstrap stays fixed/root-local, screenshot stays UID1000/tmp, revocation stops second exec',async()=>{
+  for(const revoke of [false,true]){let granted=true;const o={...options(),desktop:true,canMutate:()=>granted,canExecute:()=>granted},d=new FixtureDocker(o);d.current=inspection(o,true);(d.current.HostConfig as any).Tmpfs={'/tmp':'rw,nosuid,nodev,size=268435456,mode=1777'};const original=d.command.bind(d);d.command=async args=>{if(args[0]==='image')return JSON.stringify([{Id:IMAGE_ID,Config:{Labels:{'org.chestnut.pi.commit':PI_SOURCE_COMMIT,'org.chestnut.desktop':'1','org.chestnut.desktop.browser':'chromium'}}}]);const result=await original(args);if(revoke&&args.includes(DESKTOP_TMPFS_INIT))granted=false;return result;};const env=new StableEnvironment(BOT,o,d);if(revoke)await assert.rejects(env.desktopCommand('trusted-wrapper',{op:'screenshot'}),/closed/);else await env.desktopCommand('trusted-wrapper',{op:'screenshot'});const execs=d.calls.filter(a=>a[0]==='exec');assert.equal(execs.length,revoke?1:2);assert.equal(execs[0]![execs[0]!.indexOf('--user')+1],'0:0');assert.ok(execs[0]!.includes(DESKTOP_TMPFS_INIT));if(!revoke)assert.equal(execs[1]![execs[1]!.indexOf('--user')+1],'1000:1000');for(const args of execs)assert.equal(args[args.indexOf('--workdir')+1],'/tmp');}
+});
+
+test('actual service runner tool allowlist includes the registered computer tool',async()=>{
+  const entry=await readFile(new URL('../src/sandbox/container-entry.mjs',import.meta.url),'utf8');const match=/const environmentTools = (.*);/.exec(entry);assert.ok(match);assert.match(match[1]!,/'environment_computer'/);assert.match(entry,/--no-tools/);
 });

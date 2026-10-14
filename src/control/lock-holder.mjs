@@ -2,6 +2,7 @@
 // flock --no-fork owns this process. Never exit on an ambiguous Docker command outcome.
 import { spawn } from 'node:child_process';
 import { dirname } from 'node:path';
+import { environmentReadinessForwarder } from '../pi/environment-readiness.mjs';
 import { constants, openSync, closeSync, writeSync, ftruncateSync, fsyncSync, unlinkSync } from 'node:fs';
 
 const [markerPath, fixtureFlag, fixtureExecutable] = process.argv.slice(2);
@@ -142,7 +143,8 @@ function attach(id,args) {
       if (line.trim()) send({ type: 'line', attachmentId: id, line });
     }
   });
-  child.stderr.on('data', chunk => { operation.stderr = (operation.stderr + chunk).slice(-4096); });
+  const readiness=environmentReadinessForwarder(line=>send({type:'line',attachmentId:id,line}));
+  child.stderr.on('data', chunk => { operation.stderr = (operation.stderr + chunk).slice(-4096);readiness(chunk); });
   for (const stream of [child.stdout,child.stderr]) stream.on('error', error => { operation.failure ??= error.message; child.kill('SIGKILL'); });
   child.on('error', error => { operation.failure = error.message; });
   child.on('close', (code,signal) => {

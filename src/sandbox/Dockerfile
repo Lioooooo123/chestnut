@@ -9,7 +9,7 @@ RUN npm ci --ignore-scripts --no-audit --no-fund && node packages/ai/scripts/hyd
 RUN node -e "const fs=require('fs');for(const d of fs.readdirSync('packages')){const p='packages/'+d+'/package.json';if(!fs.existsSync(p))continue;const n=JSON.parse(fs.readFileSync(p)).name;if(n?.startsWith('@earendil-works/')){const r=fs.realpathSync('node_modules/'+n);if(!r.startsWith('/opt/pi/packages/'))throw Error('mixed Pi dependency: '+n)}}"
 FROM node:24-bookworm-slim
 ARG WITH_DESKTOP=0
-RUN if [ "$WITH_DESKTOP" = 1 ]; then apt-get update && apt-get install -y --no-install-recommends xvfb openbox chromium xdotool imagemagick procps fonts-dejavu-core && rm -rf /var/lib/apt/lists/* && test "$(id -u node)" = 1000; fi
+RUN if [ "$WITH_DESKTOP" = 1 ]; then apt-get update && apt-get install -y --no-install-recommends xvfb openbox chromium chromium-sandbox xdotool imagemagick procps fonts-dejavu-core && rm -rf /var/lib/apt/lists/* && test "$(id -u node)" = 1000; fi
 LABEL org.chestnut.desktop="${WITH_DESKTOP}"
 LABEL org.chestnut.desktop.browser="chromium"
 LABEL org.chestnut.pi.commit="4270522473e677ddba7b093caa0064a3df51d459"

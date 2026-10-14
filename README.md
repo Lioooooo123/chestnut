@@ -2,7 +2,7 @@
 
 个人 self-hosted 多 Bot 工作平台，当前为 Memoh-inspired 有边界的功能里程碑。Bot 负责接收、排队和显示状态，独立 Worker 在隔离环境中运行 Pi。
 
-**本次已实现并测试：协议/记忆/OAuth修复、持久排期、Telegram私聊适配器、独立稳定Root环境、受控包安装/HTTPS读取和管理界面。真实Docker、在线模型/Telegram、包安装与服务连续性仍未验收，不能视为完整Memoh或可生产部署版本。** 默认保持受限的ephemeral profile。新service profile见[设计与边界](docs/service-profile.md)，必须完成[实机验收](docs/service-acceptance.md)。
+**本次已实现并测试：协议/记忆/OAuth修复、持久排期、Telegram私聊适配器、独立稳定Root环境、受控包安装/HTTPS读取和管理界面。Mac Linux VM内真实持久文件、服务连续性与快照恢复已验收；Chromium sandbox仍受阻，在线模型/Telegram和包安装仍未验收，不能视为完整Memoh或可生产部署版本。** 默认保持受限的ephemeral profile。新service profile见[设计与边界](docs/service-profile.md)，必须完成[实机验收](docs/service-acceptance.md)。
 
 这次交付未部署、未登录或连接真实模型/Telegram。Pi 的完整官方源码已纳入 `vendor/pi/`，固定到 `4270522473e677ddba7b093caa0064a3df51d459`，不是换个名字调用 registry SDK。Dashboard 是无需构建的原生 JavaScript 客户端。本次在 macOS 完成无模型任务聊天、刷新和重启闭环及 Safari 检查；其模拟结果不能证明真实模型或 Linux 容器。当前实现仍以Linux为目标，最新验证与历史记录见 [docs/verification.md](docs/verification.md)。
 
@@ -39,7 +39,7 @@ Dashboard 支持创建/选择 Bot、任务提交、历史与结果、进度事�
 
 ## Mac 本地运行
 
-Mac 原生 Demo 已可用。真实 Pi/Bot 采用同一 Linux VM 内的 API、Worker、锁、broker 和容器；新增只读 `npm run mac:preflight` 检查已有 Colima，绝不自动启动/安装或放宽隔离。当前现有 VM 已启动，但缺少 Node/rootless 依赖，真实 Bot 未验收，具体核查、准备步骤和未测项见 [Mac Linux VM 路径](docs/mac-linux-vm.md)。
+Mac 原生 Demo 已可用。真实 Pi/Bot 采用同一 Linux VM 内的 API、Worker、锁、broker 和容器；新增只读 `npm run mac:preflight` 检查已有 Colima，绝不自动启动/安装或放宽隔离。当前现有 VM 已运行真实 loopback API/Worker和Rootless Docker，持久文件/快照已验收，未接模型且Chromium sandbox受阻，具体核查、准备步骤和未测项见 [Mac Linux VM 路径](docs/mac-linux-vm.md)。
 
 ## 真实 Pi 模式
 

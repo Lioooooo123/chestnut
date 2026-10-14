@@ -36,7 +36,7 @@ const memoryArgs = existsSync(memorySocket) ? ['--extension', '/opt/chestnut/mem
 const environmentSocket = '/run/chestnut/environment.sock';
 const environmentEnabled = process.env.CHESTNUT_ENVIRONMENT_BROKER === '1';
 if (environmentEnabled && !existsSync(environmentSocket)) throw new Error('Environment broker socket missing');
-const environmentTools = ['environment_bash','environment_read','environment_write','environment_edit','environment_packages','environment_fetch',...(memoryArgs.length ? ['memory_search','memory_read','memory_save','memory_update','memory_forget'] : [])];
+const environmentTools = ['environment_bash','environment_read','environment_write','environment_edit','environment_packages','environment_fetch','environment_computer',...(memoryArgs.length ? ['memory_search','memory_read','memory_save','memory_update','memory_forget'] : [])];
 const environmentArgs = environmentEnabled ? ['--no-tools', '--tools', environmentTools.join(','), '--extension', '/opt/chestnut/environment-extension.mjs'] : [];
 const child = spawn('node', [
   '/opt/pi/packages/coding-agent/dist/bundle/rpc-entry.js', '--provider', 'chestnut', '--model', model,

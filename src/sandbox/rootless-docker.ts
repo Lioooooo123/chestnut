@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import type { RpcTransport, SandboxBackend, WorkerInput } from '../pi/types.ts';
 import type { DockerCommandRunner } from './persistent-docker.ts';
 import { sharedVerifiedCleanup } from './verified-cleanup.ts';
+import { environmentReadinessForwarder } from '../pi/environment-readiness.mjs';
 
 const execFileAsync = promisify(execFile);
 export const PI_SOURCE_COMMIT = '4270522473e677ddba7b093caa0064a3df51d459';
@@ -146,7 +147,8 @@ export class RootlessDockerBackend implements SandboxBackend {
     let closeError: Error | undefined;
     let isClosed = false;
     child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
-    child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-8192); });
+    const readiness=environmentReadinessForwarder((line:string)=>lineListener(line));
+    child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-8192);readiness(chunk); });
     child.stdout.on('data', (chunk: string) => {
       buffer += chunk;
       if (buffer.length > 8 * 1024 * 1024) { closeListener(new Error('Pi output frame exceeded limit')); void stop().catch(() => {}); return; }
