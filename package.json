@@ -12,6 +12,7 @@
     "worker": "node --env-file-if-exists=.env src/cli.ts worker",
     "doctor": "node --env-file-if-exists=.env src/cli.ts doctor",
     "preflight": "node scripts/preflight.mjs",
+    "mac:preflight": "node scripts/mac-preflight.mjs",
     "acceptance:offline": "node scripts/acceptance-offline.mjs",
     "acceptance:docker": "node scripts/acceptance-docker.mjs",
     "test": "node scripts/test.mjs",

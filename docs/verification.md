@@ -1,5 +1,9 @@
 # Verification report
 
+## Mac Linux VM read-only entry (2026-10-14 UTC)
+
+The user approved starting the existing Colima default profile, which started without manual resource/network/security edits. Actual guest: Ubuntu 24.04.4 ARM64, UID 501, guest-native ext4 home/tmp, util-linux flock present; Node/npm and rootless runtime prerequisites absent. Existing Docker is rootful/cgroupfs. New `mac:preflight` reproduces these blockers without installing, starting or configuring anything. Its three injected-probe contracts pass (stopped/missing VM never SSHs or starts, read-only guest/rootless/pinned ARM64 checks, invalid/unavailable inputs do not echo raw stderr). Docker probes isolate guest context from Mac environment overrides. Final guarded Mac regression: **348 tests, 338 passed, 0 failed, 10 Linux OS-lock skips**, clean TypeScript. This is not a guest test suite, Docker isolation or completed Mac Bot runtime acceptance. Steps and explicit remaining VM preparation are in [mac-linux-vm.md](mac-linux-vm.md).
+
 ## Snapshot directory mode repair after 0ef9497
 
 Independent QA reproduced successful publication followed by workspace inventory mismatch for nested 0775 directories under umask 022. Copy now creates writable staging directories, explicitly restores their permissions in post-order after copying files, fsyncs them, and verifies the entire copied inventory before snapshot publication or restore/rollback replacement. Real filesystem regressions exercise nested 0775 and read-only 0555 directories through create, load, protection snapshot and restore; all 16 snapshot tests pass with a synthetic Docker runner. Final guarded macOS check: **345 tests, 335 pass, 0 fail, 10 Linux OS-lock skips**, with clean TypeScript. Existing corrupt snapshots remain rejected; no manifest rewrite or Docker live acceptance is claimed.

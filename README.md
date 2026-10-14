@@ -37,6 +37,10 @@ Dashboard 支持创建/选择 Bot、任务提交、历史与结果、进度事�
 
 部署准备先看 [启动与失败恢复指引](docs/deployment-runbook.md)：`npm run preflight -- --offline` 是不初始化状态的只读检查；`npm run acceptance:offline` 复用完整离线测试；`npm run acceptance:docker` 默认只列计划，必须明确加 `--execute --data-dir <新的独立目录>` 才运行 Linux/Docker 验收子集。它们不会安装系统软件、开放公网或自动使用模型/Telegram。`doctor` 会初始化数据目录，不应当作只读预检。
 
+## Mac 本地运行
+
+Mac 原生 Demo 已可用。真实 Pi/Bot 采用同一 Linux VM 内的 API、Worker、锁、broker 和容器；新增只读 `npm run mac:preflight` 检查已有 Colima，绝不自动启动/安装或放宽隔离。当前现有 VM 已启动，但缺少 Node/rootless 依赖，真实 Bot 未验收，具体核查、准备步骤和未测项见 [Mac Linux VM 路径](docs/mac-linux-vm.md)。
+
 ## 真实 Pi 模式
 
 在你自己的 Linux 主机上完成以下步骤。真实容器构建、模型调用和容器网关联调尚未执行；本机无模型 API 与浏览器检查不能代替这些验收。

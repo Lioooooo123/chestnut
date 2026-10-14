@@ -8,7 +8,7 @@ import { assertResourceControls, assertRootless, PI_SOURCE_COMMIT } from '../san
 export type Probe = (program:string, args:string[])=>Promise<string>;
 export const probe:Probe = async (program,args) => (await promisify(execFile)(program,args,{timeout:10000,maxBuffer:2*1024*1024})).stdout;
 export interface PreflightOptions { offline?:boolean; docker?:boolean; dataDir?:string; image?:string }
-export interface PreflightHost { platform:string; uid:number|undefined; nodeVersion:string; run:Probe }
+export interface PreflightHost { platform:string; uid:number|undefined; nodeVersion:string; run:Probe; dockerHost?:string }
 export interface Check { name:string; state:'passed'|'blocked'|'not_run'; detail:string }
 export async function validateNewDataDirectory(path:string, uid=process.getuid?.()):Promise<void> {
   if(!isAbsolute(path)||resolve(path)!==path||/[,\r\n\0]/.test(path))throw new Error('Choose a normalized absolute data path');
@@ -18,7 +18,7 @@ export async function validateNewDataDirectory(path:string, uid=process.getuid?.
   if(!stat.isDirectory()||stat.isSymbolicLink()||await realpath(parent)!==parent||(stat.mode&0o022)!==0||(uid!==undefined&&stat.uid!==uid))throw new Error('Parent must be canonical, owned by this user, and not writable by others');
   await access(parent,constants.W_OK|constants.X_OK);
 }
-export async function preflight(options:PreflightOptions={},host:PreflightHost={platform:process.platform,uid:process.getuid?.(),nodeVersion:process.versions.node,run:probe}) {
+export async function preflight(options:PreflightOptions={},host:PreflightHost={platform:process.platform,uid:process.getuid?.(),nodeVersion:process.versions.node,run:probe,dockerHost:process.env.DOCKER_HOST}) {
   const checks:Check[]=[];
   let imageId:string|null=null;
   const add=(name:string,state:Check['state'],detail:string)=>checks.push({name,state,detail});
@@ -38,7 +38,7 @@ export async function preflight(options:PreflightOptions={},host:PreflightHost={
       const endpoint=JSON.parse(await host.run('docker',['context','inspect',context,'--format','{{json .Endpoints.docker.Host}}']));
       // Reject every configured remote route rather than depending on precedence
       // between DOCKER_HOST and DOCKER_CONTEXT. Both admitted choices are local.
-      if(typeof endpoint!=='string'||!endpoint.startsWith('unix://')||(process.env.DOCKER_HOST&&!process.env.DOCKER_HOST.startsWith('unix://')))throw new Error('Only local Unix Docker endpoints are admitted');
+      if(typeof endpoint!=='string'||!endpoint.startsWith('unix://')||(host.dockerHost&&!host.dockerHost.startsWith('unix://')))throw new Error('Only local Unix Docker endpoints are admitted');
       const info=JSON.parse(await host.run('docker',['info','--format','{{json .}}']));assertRootless(info);assertResourceControls(info);
       add('docker','passed','Local rootless daemon reports cgroup v2/systemd CPU, memory, swap and PID controls');
       const images=JSON.parse(await host.run('docker',['image','inspect',image]));
